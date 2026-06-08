@@ -74,6 +74,8 @@ def opencode_control():
     try:
         r = sp.run(['systemctl', action, 'opencode-web'], capture_output=True, text=True, timeout=10)
         return jsonify({'ok': r.returncode == 0, 'output': r.stdout.strip()[:200]})
+    except FileNotFoundError:
+        return jsonify({'error': 'systemctl not available'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -87,5 +89,7 @@ def hermes_control():
     try:
         r = sp.run(['systemctl', action, 'hermes-web-ui'], capture_output=True, text=True, timeout=10)
         return jsonify({'ok': r.returncode == 0, 'output': r.stdout.strip()[:200]})
+    except FileNotFoundError:
+        return jsonify({'error': 'systemctl not available'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
