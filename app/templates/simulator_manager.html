@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% set active_page = 'simulator' %}
+{% block title %}模拟器管理{% endblock %}
+{% block page_title %}模拟器管理{% endblock %}
+{% block page_subtitle %}部署 · 升级 · 启停 · 远程管理{% endblock %}
+
+{% block head_extra %}
+<style>
+.ctrl-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.badge{ font-size:9px; padding:2px 7px; border-radius:4px; }
+.badge.ok{ background:var(--success-bg); color:var(--success); }
+.badge.off{ background:var(--danger-bg); color:var(--danger); }
+.badge.key{ background:var(--accent-dim); color:var(--accent); }
+.badge.pass{ background:var(--warning-bg); color:var(--warning); }
+.d1{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+.d1.on{ background:var(--success); }
+.d1.off{ background:var(--danger); }
+.radio-group{ display:flex; gap:16px; margin-bottom:12px; }
+.radio-group label{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text); cursor:pointer; }
+@media(max-width:900px){ .stat-grid{ grid-template-columns:repeat(2,1fr); } }
+@media(max-width:640px){ .stat-grid{ grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="section-title">本机状态</div>
+<div class="stat-grid">
+  <div class="stat-card"><div class="label">运行状态</div><div class="value"><span id="rd" class="d1 off"></span><span id="rt">检测中...</span></div><div class="sub" id="rs"></div></div>
+  <div class="stat-card"><div class="label">版本</div><div class="value" id="vt">—</div></div>
+  <div class="stat-card"><div class="label">进程</div><div class="value" id="pt">—</div><div class="sub" id="ut"></div></div>
+  <div class="stat-card"><div class="label">API / 实例</div><div class="value" id="at">—</div><div class="sub" id="it">端口 8989 · 2404</div></div>
+</div>
+
+<div class="ctrl-row">
+  <button class="btn btn-primary btn-sm" onclick="cs('start')">启动</button>
+  <button class="btn btn-warning btn-sm" onclick="cs('restart')">重启</button>
+  <button class="btn btn-danger btn-sm" onclick="cs('stop')">停止</button>
+  <a class="btn btn-primary btn-sm" target="_blank" id="wu" style="display:none">打开界面</a>
+  <button class="btn btn-outline btn-sm" onclick="od()">部署</button>
+  <button class="btn btn-outline btn-sm" onclick="rs()">刷新</button>
+</div>
+
+<div class="section-title">远程服务器</div>
+<table class="data-table"><thead><tr><th>主机</th><th>端口</th><th>版本</th><th>状态</th><th>认证</th><th>控制</th><th>操作</th></tr></thead>
+<tbody id="rb"><tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:24px;">暂无 · 点击部署添加</td></tr></tbody></table>
+
+<div style="margin-top:16px;"><div class="collapse-toggle" onclick="tc('bs')"><span>▸ 配置备份</span></div>
+<div class="collapse-body" id="bs"><table class="data-table" style="margin-top:8px;"><thead><tr><th>名称</th><th>时间</th><th>文件数</th><th>大小</th><th>版本</th></tr></thead>
+<tbody id="bb"><tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">加载中...</td></tr></tbody></table></div></div>
+
+<div class="terminal" id="pb">
+  <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span id="ptitle" style="font-weight:600;">部署日志</span><span id="pstatus" style="color:var(--text-dim);"></span></div>
+  <div id="pl"></div>
+</div>
+
+<div class="modal-overlay" id="dm">
+  <div class="modal"><h3>部署模拟器</h3>
+    <div class="form-group"><label>版本</label><select id="mv" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:12px;outline:none;"><option>加载中...</option></select></div>
+    <div class="radio-group"><label><input type="radio" name="dt" value="local" checked onchange="tt()"> 本机</label><label><input type="radio" name="dt" value="remote" onchange="tt()"> 远程</label></div>
+    <div id="rf" style="display:none;">
+      <div class="form-group"><label>主机地址</label><input type="text" id="mh" placeholder="192.168.1.100" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:12px;outline:none;"></div>
+      <div class="form-row"><div class="form-group" style="flex:1;"><label>端口</label><input type="number" id="mp" value="22" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:12px;outline:none;"></div><div class="form-group" style="flex:1;"><label>用户名</label><input type="text" id="mu" value="root" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:12px;outline:none;"></div></div>
+      <div class="form-group"><label>密码</label><input type="password" id="mpw" placeholder="SSH 密码" style="width:100%;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:12px;outline:none;"></div>
+      <div id="mcr" style="font-size:11px;color:var(--text-dim);margin-top:4px;"></div>
+    </div>
+    <div style="font-size:11px;color:var(--text-dim);padding:8px 10px;background:var(--bg-elevated);border-radius:var(--radius-sm);margin-top:8px;border:1px solid var(--border);">已有安装自动备份配置，全新部署直接解压</div>
+    <div class="modal-actions"><button class="btn btn-outline" onclick="cm()">取消</button><button class="btn btn-outline btn-sm" onclick="cr()" id="bmc" style="display:none;">检测</button><button class="btn btn-outline btn-sm" onclick="sk()" id="bsk" style="display:none;">分发密钥</button><button class="btn btn-primary" onclick="cd()">确认部署</button></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let ptimer=null,vers=[];
+function esc(s){if(!s)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function escQ(s){return s.replace(/'/g,"\\'")}
+
+async function rs(){
+  try{var r=await fetch('/api/simulator/status'),s=await r.json(),d=document.getElementById('rd'),t=document.getElementById('rt'),u=document.getElementById('rs');
+  if(s.running){d.className='d1 on';t.textContent='运行中';u.textContent='PID: '+(s.pid||'?')}else{d.className='d1 off';t.textContent='已停止';u.textContent=s.deploy_dir_exists?'未运行':'未部署'}
+  document.getElementById('vt').textContent=s.version||(s.status_info&&s.status_info.version)||'—';
+  document.getElementById('pt').textContent=s.pid||'—';document.getElementById('ut').textContent=s.uptime?'运行: '+s.uptime:'';
+  var a=document.getElementById('at'),i=document.getElementById('it'),w=document.getElementById('wu');
+  if(s.api_ok){a.textContent='正常';a.style.color='var(--success)';i.textContent='实例: '+s.instances+' | 端口 8989 · 2404';w.style.display='inline-flex';w.href='http://'+s.host_ip+':8989/'}else{a.textContent='未响应';a.style.color='var(--danger)';w.style.display='none'}
+  }catch(e){}
+}
+async function cs(a){try{var r=await fetch('/api/simulator/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:a})});var d=await r.json();if(d.task_id){showToast('执行中...');setTimeout(rs,3000)}}catch(e){showToast('操作失败')}}
+async function lv(){try{var r=await fetch('/api/simulator/versions'),d=await r.json();vers=d.versions||[];var s=document.getElementById('mv');s.innerHTML=vers.length?'':'';vers.forEach(function(v){s.innerHTML+='<option value="'+v.version+'">'+v.version+' ('+v.size_fmt+')</option>'})}catch(e){}}
+function od(){document.getElementById('dm').classList.add('open');lv();tt()}
+function cm(){document.getElementById('dm').classList.remove('open')}
+function tt(){var isR=document.querySelector('input[name="dt"]:checked').value==='remote';document.getElementById('rf').style.display=isR?'block':'none';document.getElementById('bmc').style.display=isR?'inline-flex':'none';document.getElementById('bsk').style.display=isR?'inline-flex':'none'}
+async function cr(){var h=document.getElementById('mh').value.trim(),p=parseInt(document.getElementById('mp').value)||22,u=document.getElementById('mu').value.trim()||'root',pw=document.getElementById('mpw').value,rd=document.getElementById('mcr');if(!h){rd.textContent='输入地址';return}rd.textContent='检测中...';try{var r=await fetch('/api/simulator/remote-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:h,port:p,user:u,password:pw})}),d=await r.json();rd.textContent=d.reachable?'可达'+(d.sim_running?' 模拟器: '+(d.version||'运行中'):' 未运行'):'不可达'}catch(e){rd.textContent='检测失败'}}
+async function sk(){var h=document.getElementById('mh').value.trim(),p=parseInt(document.getElementById('mp').value)||22,u=document.getElementById('mu').value.trim()||'root',pw=document.getElementById('mpw').value,rd=document.getElementById('mcr'),btn=document.getElementById('bsk');if(!h||!pw){rd.textContent='需要地址和密码';return}btn.disabled=true;btn.textContent='...';rd.textContent='分发中...';try{var r=await fetch('/api/simulator/setup-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:h,port:p,user:u,password:pw})}),d=await r.json();if(d.ok){rd.textContent='密钥已分发';btn.style.display='none';showToast('密钥分发成功');rr()}else rd.textContent='失败: '+(d.error||'')}catch(e){rd.textContent='异常'}btn.disabled=false;btn.textContent='分发密钥'}
+async function cd(){var v=document.getElementById('mv').value;if(!v){showToast('请选择版本');return}var isR=document.querySelector('input[name="dt"]:checked').value==='remote',btn=document.querySelector('#dm .btn-primary');btn.disabled=true;btn.textContent='...';var url,body;if(isR){var h=document.getElementById('mh').value.trim(),p=parseInt(document.getElementById('mp').value)||22,u=document.getElementById('mu').value.trim()||'root',pw=document.getElementById('mpw').value;if(!h||!pw){showToast('需要地址和密码');btn.disabled=false;btn.textContent='确认部署';return}url='/api/simulator/remote-deploy';body={version:v,host:h,port:p,user:u,password:pw}}else{url='/api/simulator/deploy';body={version:v}}cm();try{var r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),d=await r.json();if(d.task_id){showToast('开始部署 '+v);sp(d.task_id)}}catch(e){showToast('部署失败')}btn.disabled=false;btn.textContent='确认部署'}
+function sp(id){var b=document.getElementById('pb');b.classList.add('active');document.getElementById('pl').innerHTML='';document.getElementById('ptitle').textContent='部署日志';if(ptimer)clearInterval(ptimer);ptimer=setInterval(function(){pp(id)},800);pp(id)}
+async function pp(id){try{var r=await fetch('/api/simulator/deploy-status/'+id),d=await r.json(),l=document.getElementById('pl');l.innerHTML='';(d.logs||[]).forEach(function(x){l.innerHTML+='<div style="font-size:11px;line-height:1.7;color:'+(x.msg.indexOf('❌')>=0?'var(--danger)':'var(--text-secondary)')+';">['+x.time+'] '+x.msg+'</div>'});document.getElementById('pb').scrollTop=document.getElementById('pb').scrollHeight;if(d.status==='completed'||d.status==='warning'||d.status==='error'){clearInterval(ptimer);ptimer=null;document.getElementById('ptitle').textContent=d.status==='completed'?'部署完成':d.status==='warning'?'部署完成(有警告)':'部署失败';rs();rr();rb2()}}catch(e){}}
+async function rr(){var b=document.getElementById('rb');try{var r=await fetch('/api/simulator/remote-servers'),d=await r.json(),s=d.servers||[];if(!s.length){b.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:24px;">暂无 · 点击部署添加</td></tr>';return}var h='';s.forEach(function(s){var on=s.status==='running';h+='<tr><td>'+esc(s.host)+'</td><td>'+(s.port||22)+'</td><td>'+esc(s.version||'—')+'</td><td><span class="badge '+(on?'ok':'off')+'">'+(on?'运行中':'已停止')+'</span></td><td><span class="badge '+(s.auth==='key'?'key':'pass')+'">'+(s.auth==='key'?'密钥':'密码')+'</span></td><td>';h+=on?'<button class="btn btn-warning btn-xs" onclick="rc(\''+escQ(s.host)+'\',\'restart\')">重启</button> <button class="btn btn-danger btn-xs" onclick="rc(\''+escQ(s.host)+'\',\'stop\')">停止</button>':'<button class="btn btn-primary btn-xs" onclick="rc(\''+escQ(s.host)+'\',\'start\')">启动</button>';h+='</td><td style="display:flex;gap:4px;">';if(on)h+='<a class="btn btn-primary btn-xs" href="http://'+esc(s.host)+':8989/" target="_blank" style="text-decoration:none;">打开</a>';h+='<button class="btn btn-danger btn-xs" onclick="dr(\''+escQ(s.host)+'\')">删除</button></td></tr>'});b.innerHTML=h}catch(e){}}
+async function dr(h){if(!confirm('确定删除 '+h+' 的记录？'))return;try{await fetch('/api/simulator/remote-servers',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:h})});rr();showToast('已删除')}catch(e){}}
+async function rc(h,a){showToast(h+' '+a+'...');try{var r=await fetch('/api/simulator/remote-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:h,action:a})}),d=await r.json();if(d.ok){showToast('操作成功');setTimeout(rr,3000)}else showToast('失败: '+(d.error||''))}catch(e){}}
+async function rb2(){var b=document.getElementById('bb');try{var r=await fetch('/api/simulator/backups'),d=await r.json(),bk=d.backups||[];if(!bk.length){b.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">暂无备份</td></tr>';return}var h='';bk.forEach(function(x){h+='<tr><td>'+esc(x.name)+'</td><td>'+x.time+'</td><td>'+x.files+'</td><td>'+x.size+'</td><td>'+esc(x.version||'')+'</td></tr>'});b.innerHTML=h}catch(e){}}
+function tc(id){var e=document.getElementById(id);e.classList.toggle('open');var t=e.previousElementSibling.querySelector('span');t.textContent=e.classList.contains('open')?'▾ 配置备份':'▸ 配置备份'}
+
+document.addEventListener('DOMContentLoaded',function(){rs();rr();rb2();setInterval(rs,10000);setInterval(rr,30000);document.getElementById('dm').addEventListener('click',function(e){if(e.target===this)cm()})});
+</script>
+{% endblock %}

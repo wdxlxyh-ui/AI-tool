@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+data/
+data_work_reports/
+.sisyphus/
+*.db
+*.sqlite
+*.log
+.env
+skills/

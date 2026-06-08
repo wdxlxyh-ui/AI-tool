@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% set active_page = "dashboard" %}
+{% block page_title %}仪表盘{% endblock %}
+{% block page_subtitle %}系统概览{% endblock %}
+
+{% block head_extra %}
+<style>
+.tool-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; margin-bottom:24px; }
+.tool-card{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:20px; cursor:pointer; text-decoration:none; display:block; transform:translateY(0); box-shadow:0 0 0 rgba(75,140,247,0); transition:transform .28s cubic-bezier(.16,1,.3,1), box-shadow .28s ease, border-color .28s ease; }
+.tool-card:hover{ border-color:var(--accent); transform:translateY(-3px); text-decoration:none; box-shadow:0 6px 24px rgba(75,140,247,.18); }
+.tool-card .icon{ width:40px; height:40px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:17px; margin-bottom:12px; transition:transform .28s ease; }
+.tool-card:hover .icon{ transform:scale(1.1); }
+@media (prefers-reduced-motion){ .tool-card{ transition:none !important; } .tool-card:hover{ transform:none !important; } }
+.tool-card .icon.files{ background:rgba(75,140,247,.1); color:var(--accent); }
+.tool-card .icon.sim{ background:rgba(163,113,247,.1); color:#a371f7; }
+.tool-card .icon.ow{ background:rgba(63,185,80,.1); color:var(--success); }
+.tool-card h3{ font-size:14px; font-weight:600; color:var(--text); margin-bottom:4px; }
+.tool-card p{ font-size:11px; color:var(--text-dim); line-height:1.5; }
+.tool-card .footer{ margin-top:14px; display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-dim); }
+.tool-card .footer .dot{ width:6px; height:6px; border-radius:50%; }
+.tool-card .footer .dot.on{ background:var(--success); }
+.tool-card .footer .dot.off{ background:var(--danger); }
+.tool-card .controls{ margin-top:12px; display:flex; gap:6px; flex-wrap:wrap; }
+.tool-card .controls .btn{ font-size:10px; padding:4px 10px; border-radius:4px; }
+
+.info-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; font-size:12px; }
+.info-grid .i{ display:flex; align-items:center; gap:8px; }
+.info-grid .i label{ color:var(--text-dim); min-width:65px; }
+@media(max-width:640px){ .tool-grid{ grid-template-columns:1fr; } .info-grid{ grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="label">CPU 负载</div>
+    <div class="value">{{ stats.cpu_load }}</div>
+    <div class="sub">1分钟平均负载</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">内存使用</div>
+    <div class="value">{{ stats.ram_used }}M / {{ stats.ram_total }}M</div>
+    <div class="progress-bar"><div class="fill ram" style="width:{{ stats.ram_percent }}%"></div></div>
+    <div class="sub">{{ stats.ram_percent }}%</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">工具数量</div>
+    <div class="value">{{ stats.tool_count }}</div>
+    <div class="sub">文件 + 模拟器 + OpenCode + SFTP + Hermes</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">磁盘空间</div>
+    <div class="value">{{ (stats.disk_free / 1073741824)|round(1) }}G</div>
+    <div class="progress-bar"><div class="fill disk" style="width:{{ stats.disk_percent }}%"></div></div>
+    <div class="sub">已用 {{ stats.disk_percent }}%</div>
+  </div>
+</div>
+
+<div class="section-title">工具列表</div>
+<div class="tool-grid">
+  <a class="tool-card" href="{{ url_for('file_manager.index') }}">
+    <div class="icon files">▣</div>
+    <h3>文件管理</h3>
+    <p>全文件系统浏览、上传、下载、删除。支持任意路径与拖拽上传。</p>
+    <div class="footer"><span class="dot on"></span> 运行中</div>
+  </a>
+  <a class="tool-card" href="{{ url_for('simulator.index') }}">
+    <div class="icon sim">◈</div>
+    <h3>模拟器管理</h3>
+    <p>IEC104 部署、升级、启停、远程管理。本机与远程服务器统一控制。</p>
+    <div class="footer"><span class="dot on"></span> 运行中</div>
+  </a>
+  <a class="tool-card" href="{{ url_for('sftp.index') }}">
+    <div class="icon ow">⇄</div>
+    <h3>SFTP 传输</h3>
+    <p>远程文件管理，上传下载。支持保存服务器连接记录，双栏对照操作。</p>
+    <div class="footer"><span class="dot on"></span> SSH 连接</div>
+  </a>
+  <div class="tool-card" style="cursor:default;">
+    <div class="icon ow">◇</div>
+    <h3>OpenCode-Web</h3>
+    <p>AI 编程助手 Web 界面，端口 3000。由 systemd 守护管理。</p>
+    <div class="footer"><span class="dot" id="ow-dot"></span> <span id="ow-status">检测中...</span></div>
+    <div class="controls">
+      <a class="btn btn-primary" href="http://10.230.169.162:3000/" target="_blank">打开</a>
+      <button class="btn btn-outline" onclick="owControl('start')">启动</button>
+      <button class="btn btn-outline" onclick="owControl('restart')">重启</button>
+      <button class="btn btn-danger" onclick="owControl('stop')">停止</button>
+    </div>
+  </div>
+  <a class="tool-card" href="{{ url_for('work_reports.index') }}">
+    <div class="icon" style="background:rgba(63,185,80,.1);color:var(--success);">📋</div>
+    <h3>工作日报</h3>
+    <p>碎片记录 · 自动整理 · 日报/周报生成 · 任务看板</p>
+    <div class="footer"><span class="dot on"></span> 已集成</div>
+  </a>
+  <div class="tool-card" style="cursor:default;">
+    <div class="icon" style="background:rgba(163,113,247,.1);color:#a371f7;">☰</div>
+    <h3>Hermes Web UI</h3>
+    <p>Hermes AI Agent Web 管理界面，端口 8648。由 systemd 守护管理。</p>
+    <div class="footer"><span class="dot" id="hm-dot"></span> <span id="hm-status">检测中...</span></div>
+    <div class="controls">
+      <a class="btn btn-primary" href="http://10.230.169.162:8648/" target="_blank">打开</a>
+      <button class="btn btn-outline" onclick="hmControl('start')">启动</button>
+      <button class="btn btn-outline" onclick="hmControl('restart')">重启</button>
+      <button class="btn btn-danger" onclick="hmControl('stop')">停止</button>
+    </div>
+  </div>
+</div>
+
+<div class="section-title">系统信息</div>
+<div class="info-grid">
+  <div class="i"><label>服务器</label><span>Flask · 端口 8080</span></div>
+  <div class="i"><label>自启动</label><span style="color:var(--success);">已配置</span></div>
+  <div class="i"><label>运行时间</label><span>{{ stats.uptime }}</span></div>
+  <div class="i"><label>Python</label><span>3.8.10 · Flask 3.0.3</span></div>
+  <div class="i"><label>数据库</label><span>SQLite</span></div>
+  <div class="i"><label>模拟器</label><span style="color:var(--accent);">v2.5.3 · 端口 8989</span></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  var cards = document.querySelectorAll('.stat-card .value');
+  cards.forEach(function(el){
+    var text = el.textContent.trim();
+    var num = parseFloat(text);
+    if (isNaN(num)) return;
+    var isPercent = text.indexOf('%') > -1;
+    var suffix = isPercent ? '%' : '';
+    if (!suffix) {
+      var m = text.match(/[\d.]+\s*([A-Za-z]+)/);
+      if (m) suffix = m[1];
+    }
+    var parts = text.split('/');
+    var hasSlash = parts.length === 2;
+    el.textContent = '0' + suffix;
+    var startTime = performance.now();
+    var duration = 800;
+    var target = num;
+    function tick(now) {
+      var t = Math.min((now - startTime) / duration, 1);
+      var ease = 1 - Math.pow(1 - t, 3);
+      var current = target * ease;
+      var display = Number.isInteger(target) ? Math.round(current) : current.toFixed(1);
+      el.textContent = display + suffix;
+      if (hasSlash) {
+        el.textContent += ' / ' + parts[1].trim();
+      }
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  });
+})();
+async function checkOW(){
+  try{var r=await fetch('http://localhost:3000/',{mode:'no-cors'});document.getElementById('ow-dot').className='dot on';document.getElementById('ow-status').textContent='运行中 · 端口 3000'}catch(e){
+    document.getElementById('ow-dot').className='dot off';document.getElementById('ow-status').textContent='已停止'}
+}
+async function owControl(action){
+  var labels={start:'启动',stop:'停止',restart:'重启'};
+  showToast(labels[action]+' OpenCode-Web...');
+  try{var r=await fetch('/api/system/opencode-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:action})}),d=await r.json();
+  if(d.ok){showToast('操作成功');setTimeout(checkOW,3000)}else{showToast('失败')}}catch(e){showToast('操作失败')}
+}
+checkOW();setInterval(checkOW,15000);
+
+async function checkHM(){
+  try{var r=await fetch('http://localhost:8648/',{mode:'no-cors'});document.getElementById('hm-dot').className='dot on';document.getElementById('hm-status').textContent='运行中 · 端口 8648'}catch(e){
+    document.getElementById('hm-dot').className='dot off';document.getElementById('hm-status').textContent='已停止'}
+}
+async function hmControl(action){
+  var labels={start:'启动',stop:'停止',restart:'重启'};
+  showToast(labels[action]+' Hermes Web UI...');
+  try{var r=await fetch('/api/system/hermes-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:action})}),d=await r.json();
+  if(d.ok){showToast('操作成功');setTimeout(checkHM,3000)}else{showToast('失败')}}catch(e){showToast('操作失败')}
+}
+checkHM();setInterval(checkHM,15000);
+</script>
+{% endblock %}

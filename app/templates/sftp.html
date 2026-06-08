@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% set active_page = 'sftp' %}
+{% block title %}SFTP 文件传输{% endblock %}
+{% block page_title %}SFTP 文件传输{% endblock %}
+{% block page_subtitle %}远程文件管理 · 上传 · 下载{% endblock %}
+
+{% block head_extra %}
+<style>
+.top-bar{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; align-items:flex-end; }
+.top-bar .fld{ display:flex; flex-direction:column; gap:3px; }
+.top-bar .fld label{ font-size:10px; color:var(--text-dim); }
+.top-bar .fld input,.top-bar .fld select{ padding:7px 10px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg-elevated); color:var(--text); font-size:12px; outline:none; }
+.top-bar .fld input:focus,.top-bar .fld select:focus{ border-color:var(--accent); }
+.top-bar .fld select{ min-width:160px; }
+
+.path-bar{ display:flex; gap:6px; margin-bottom:8px; }
+.path-bar input{ flex:1; padding:6px 10px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg-elevated); color:var(--accent); font-family:monospace; font-size:11px; outline:none; }
+.path-bar .go{ padding:5px 12px; border:none; border-radius:4px; background:var(--accent); color:#fff; font-size:10px; cursor:pointer; }
+
+.dual-pane{ display:grid; grid-template-columns:1fr 1fr; gap:10px; height:calc(100vh - 260px); }
+.pane{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); display:flex; flex-direction:column; overflow:hidden; }
+.pane-header{ padding:10px 14px; border-bottom:1px solid var(--border); font-size:11px; font-weight:600; color:var(--text); display:flex; justify-content:space-between; }
+.pane-list{ flex:1; overflow-y:auto; padding:4px 0; }
+.pane-list .row{ display:flex; align-items:center; padding:6px 14px; font-size:12px; cursor:pointer; transition:all var(--transition); gap:8px; border-bottom:1px solid var(--border); }
+.pane-list .row:hover{ background:var(--bg-hover); }
+.pane-list .row.dir{ color:var(--accent); }
+.pane-list .row .name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pane-list .row .size{ font-size:10px; color:var(--text-dim); min-width:50px; text-align:right; }
+.pane-list .row .time{ font-size:10px; color:var(--text-dim); min-width:70px; text-align:right; }
+
+.transfer-bar{ display:flex; justify-content:center; gap:10px; padding:8px 0; }
+.transfer-bar button{ padding:7px 20px; }
+
+.conn-status{ font-size:10px; color:var(--text-dim); margin-left:8px; }
+
+@media(max-width:900px){ .dual-pane{ grid-template-columns:1fr; height:auto; } .pane-list{ max-height:300px; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+  <div class="fld">
+    <label>服务器</label>
+    <select id="serverSelect" onchange="onServerSelect()">
+      <option value="">新建连接...</option>
+      {% for s in servers %}
+      <option value="{{ s.host }}" data-port="{{ s.port }}" data-user="{{ s.user }}" data-pass="{{ s.password }}">{{ s.host }} ({{ s.user }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="fld"><label>IP</label><input type="text" id="host" placeholder="192.168.1.100" size="14"></div>
+  <div class="fld"><label>端口</label><input type="number" id="port" value="22" size="5"></div>
+  <div class="fld"><label>用户</label><input type="text" id="user" value="root" size="8"></div>
+  <div class="fld"><label>密码</label><input type="password" id="pass" size="12"></div>
+  <div class="fld" style="justify-content:flex-end;"><label>&nbsp;</label>
+    <button class="btn btn-primary btn-sm" onclick="doConnect()" id="connectBtn">连接</button>
+  </div>
+  <span class="conn-status" id="connStatus"></span>
+</div>
+
+<div class="path-bar">
+  <input type="text" id="remotePath" placeholder="/root" value="/root" onkeydown="if(event.key==='Enter')listRemote()">
+  <button class="go" onclick="listRemote()">跳转</button>
+  <button class="btn btn-outline btn-sm" onclick="goUpRemote()">返回上级</button>
+</div>
+
+<div class="dual-pane">
+  <div class="pane">
+    <div class="pane-header">远程文件 <span style="font-weight:400;font-size:10px;" id="remotePathLabel">/root</span></div>
+    <div class="pane-list" id="remoteList"><div style="padding:20px;text-align:center;color:var(--text-dim);">请先连接服务器</div></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:0;">
+    <div class="transfer-bar">
+      <button class="btn btn-primary btn-sm" onclick="uploadFile()">→ 上传到远程</button>
+    </div>
+    <div class="transfer-bar">
+      <button class="btn btn-outline btn-sm" onclick="downloadFile()">← 下载到本机</button>
+    </div>
+    <input type="file" id="uploadInput" multiple style="display:none">
+  </div>
+  <div class="pane">
+    <div class="pane-header">本机文件 <span style="font-weight:400;font-size:10px;" id="localPathLabel"></span></div>
+    <div class="pane-list" id="localList"><div style="padding:20px;text-align:center;color:var(--text-dim);">加载中...</div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var conn={host:'',port:22,user:'root',pass:''},remotePath='/root',localPath='/root',selectedRemote='',selectedLocal='';
+
+function onServerSelect(){
+  var s=document.getElementById('serverSelect'),o=s.options[s.selectedIndex];
+  if(!o.value){document.getElementById('host').value='';document.getElementById('port').value='22';document.getElementById('user').value='root';document.getElementById('pass').value='';return}
+  document.getElementById('host').value=o.value;
+  document.getElementById('port').value=o.dataset.port||'22';
+  document.getElementById('user').value=o.dataset.user||'root';
+  document.getElementById('pass').value=o.dataset.pass||'';
+}
+
+async function doConnect(){
+  conn.host=document.getElementById('host').value.trim();
+  conn.port=parseInt(document.getElementById('port').value)||22;
+  conn.user=document.getElementById('user').value.trim()||'root';
+  conn.pass=document.getElementById('pass').value;
+  if(!conn.host){showToast('请输入服务器IP');return}
+  document.getElementById('connStatus').textContent='连接中...';
+  var ok=await listRemote();
+  if(ok){
+    document.getElementById('connStatus').textContent='已连接 '+conn.host;
+    document.getElementById('connectBtn').textContent='已连接';
+    loadServers();
+  }
+}
+
+async function listRemote(){
+  if(!conn.host)return false;
+  remotePath=document.getElementById('remotePath').value.trim()||'/';
+  document.getElementById('remotePath').value=remotePath;
+  document.getElementById('remotePathLabel').textContent=remotePath;
+  try{
+    var r=await fetch('/api/sftp/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:conn.host,port:conn.port,user:conn.user,password:conn.pass,path:remotePath})});
+    if(!r.ok){document.getElementById('connStatus').textContent='连接失败';return false}
+    var d=await r.json();
+    if(d.error){document.getElementById('connStatus').textContent=d.error;return false}
+    renderList('remoteList',d.entries,true);
+    return true;
+  }catch(e){document.getElementById('connStatus').textContent='连接异常';return false}
+}
+
+function renderList(id,entries,isRemote){
+  var el=document.getElementById(id),h='',clickFn=isRemote?'enterRemoteDir':'enterLocalDir',prefix=isRemote?'remotePath':'localPath';
+  if(entries.length===0){h='<div style="padding:20px;text-align:center;color:var(--text-dim);">此目录为空</div>'}
+  entries.forEach(function(e){
+    h+='<div class="row'+(e.is_dir?' dir':'')+'"';
+    if(e.is_dir){h+=' onclick="'+clickFn+'(\''+escQ(e.full)+'\')"';}
+    else{h+=' onclick="selectItem(\''+(isRemote?'remote':'local')+'\',\''+escQ(e.full)+'\')"';}
+    h+='><span>'+(e.is_dir?'▣':'▤')+'</span><span class="name">'+esc(e.name)+'</span><span class="size">'+(e.is_dir?'':e.size_fmt)+'</span><span class="time">'+e.mtime+'</span></div>';
+  });
+  el.innerHTML=h;
+}
+
+function enterRemoteDir(p){
+  document.getElementById('remotePath').value=p;
+  selectedRemote='';
+  listRemote();
+}
+function goUpRemote(){
+  var p=remotePath.replace(/\/[^\/]*$/,'')||'/';
+  document.getElementById('remotePath').value=p;
+  selectedRemote='';
+  listRemote();
+}
+
+function selectItem(which,path){
+  if(which==='remote'){selectedRemote=path;highlight('remoteList',path)}
+  else{selectedLocal=path;highlight('localList',path)}
+}
+function highlight(id,path){
+  var rows=document.getElementById(id).querySelectorAll('.row');
+  rows.forEach(function(r){r.style.background=''});
+  rows.forEach(function(r){if(r.querySelector('.name')&&r.querySelector('.name').textContent===path.split('/').pop()){r.style.background='var(--accent-dim)'}});
+}
+
+async function loadLocal(p){
+  localPath=p||'/root';
+  document.getElementById('localPathLabel').textContent=localPath;
+  try{
+    var r=await fetch('/api/files?path='+encodeURIComponent(localPath));
+    r=await fetch('/api/files?path='+encodeURIComponent(localPath));
+    var d=await r.json();
+    renderList('localList',d.entries,false);
+  }catch(e){}
+}
+// Local dir browsing
+function enterLocalDir(p){selectedLocal='';localPath=p;loadLocal(p)}
+function goUpLocal(){var p=localPath.replace(/\/[^\/]*$/,'')||'/';selectedLocal='';loadLocal(p)}
+
+// Reload servers dropdown
+async function loadServers(){
+  try{var r=await fetch('/api/sftp/servers'),d=await r.json();if(!d.servers)return;var s=document.getElementById('serverSelect');s.innerHTML='<option value="">新建连接...</option>';d.servers.forEach(function(x){s.innerHTML+='<option value="'+x.host+'" data-port="'+(x.port||22)+'" data-user="'+esc(x.user||'root')+'" data-pass="'+esc(x.password||'')+'">'+x.host+' ('+x.user+')</option>'})}catch(e){}
+}
+
+// Upload
+function uploadFile(){
+  if(!conn.host){showToast('请先连接服务器');return}
+  document.getElementById('uploadInput').click();
+}
+document.getElementById('uploadInput').addEventListener('change',function(){
+  var fs=this.files;if(!fs.length)return;
+  var fd=new FormData();
+  fd.append('host',conn.host);fd.append('port',conn.port);fd.append('user',conn.user);fd.append('password',conn.pass);fd.append('path',remotePath);
+  for(var i=0;i<fs.length;i++)fd.append('files',fs[i]);
+  showToast('上传中...');
+  fetch('/api/sftp/upload',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(d){showToast('上传完成: '+d.count+' 个文件');listRemote();this.value=''}.bind(this));
+});
+
+// Download
+function downloadFile(){
+  if(!selectedRemote){showToast('请先在远程面板选择文件');return}
+  showToast('下载中...');
+  fetch('/api/sftp/download',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:conn.host,port:conn.port,user:conn.user,password:conn.pass,path:selectedRemote})})
+  .then(function(r){if(!r.ok)throw new Error('download failed');return r.blob()})
+  .then(function(b){var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=selectedRemote.split('/').pop();a.click();showToast('下载完成')})
+  .catch(function(e){showToast('下载失败')});
+}
+
+function esc(s){if(!s)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function escQ(s){return s.replace(/'/g,"\\'")}
+
+// Init
+loadLocal('/root');
+document.getElementById('localPathLabel').textContent='/root';
+</script>
+{% endblock %}

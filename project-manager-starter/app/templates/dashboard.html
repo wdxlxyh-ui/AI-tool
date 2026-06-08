@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% set active_page = "dashboard" %}
+{% block page_title %}仪表盘{% endblock %}
+{% block page_subtitle %}工具概览{% endblock %}
+
+{% block head_extra %}
+<style>
+.info-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px; font-size:12px; }
+.info-grid .i{ display:flex; align-items:center; gap:8px; }
+.info-grid .i label{ color:var(--text-dim); min-width:65px; }
+@media(max-width:640px){ .tool-grid{ grid-template-columns:1fr; } .info-grid{ grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="section-title">工具列表</div>
+<div class="tool-grid">
+  {% for tool in tools %}
+    {% if tool.route and tool.route != '#' %}
+    <a class="tool-card" href="{{ tool.route }}">
+    {% else %}
+    <div class="tool-card" style="cursor:default;">
+    {% endif %}
+      <div class="icon {{ tool.icon_style }}">{{ tool.icon }}</div>
+      <h3>{{ tool.name }}</h3>
+      <p>{{ tool.desc }}</p>
+      <div class="footer">
+        <span class="dot {{ tool.status_class }}"></span> {{ tool.status }}
+      </div>
+      {% if tool.has_controls %}
+      <div class="controls">
+        {% for btn in tool.controls %}
+        <button class="btn {{ btn.class }}" onclick="{{ btn.onclick }}">{{ btn.label }}</button>
+        {% endfor %}
+      </div>
+      {% endif %}
+    {% if tool.route and tool.route != '#' %}
+    </a>
+    {% else %}
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 在此处添加你的工具 JS 逻辑
+</script>
+{% endblock %}

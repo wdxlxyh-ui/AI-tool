@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% set active_page = "file_manager" %}
+{% block page_title %}文件管理{% endblock %}
+{% block page_subtitle %}上传 · 下载 · 删除{% endblock %}
+
+{% block head_extra %}
+<style>
+.file-toolbar{ display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+.path-bar{ display:flex; align-items:center; gap:6px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-sm); padding:3px 3px 3px 12px; flex:1; min-width:200px; }
+.path-bar input{ flex:1; border:none; background:transparent; outline:none; color:var(--text); font-size:12px; font-family:monospace; min-width:100px; }
+.path-bar .go{ padding:5px 14px; border:none; border-radius:4px; background:var(--accent); color:#fff; font-size:11px; cursor:pointer; }
+.path-bar .go:hover{ opacity:.85; }
+.back-btn{ display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:var(--radius-sm); font-size:12px; cursor:pointer; background:var(--bg-elevated); border:1px solid var(--border); color:var(--text-secondary); text-decoration:none; white-space:nowrap; }
+.back-btn:hover{ background:var(--bg-hover); border-color:var(--accent); text-decoration:none; }
+.file-table{ width:100%; border-collapse:collapse; font-size:12px; }
+.file-table th{ text-align:left; padding:9px 12px; font-size:11px; color:var(--text-dim); border-bottom:1px solid var(--border); }
+.file-table td{ padding:9px 12px; border-bottom:1px solid var(--border); color:var(--text-secondary); }
+.file-table tr:hover td{ background:var(--bg-hover); }
+.file-table .clickable{ cursor:pointer; }
+.file-table .name{ display:flex; align-items:center; gap:8px; color:var(--text); }
+.file-table .tag{ font-size:9px; padding:1px 5px; border-radius:3px; background:var(--accent-dim); color:var(--accent); margin-left:6px; }
+.file-table .tag.dir{ background:rgba(163,113,247,.12); color:#a371f7; }
+.file-table .back td{ color:var(--accent); border-bottom:1px solid var(--border-light); }
+.upload-zone{ border:2px dashed var(--border); border-radius:var(--radius); padding:24px; text-align:center; margin-top:16px; cursor:pointer; transition:all var(--transition); }
+.upload-zone:hover{ border-color:var(--accent); background:var(--accent-dim); }
+.upload-zone p{ font-size:12px; color:var(--text-dim); margin-top:4px; }
+@media(max-width:640px){ .file-toolbar{ flex-direction:column; align-items:stretch; } .path-bar{ min-width:0; } .file-table th:nth-child(3),.file-table td:nth-child(3){ display:none; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="file-toolbar">
+  {% if parent %}<a class="back-btn" href="{{ url_for('file_manager.index', path=parent) }}">← 返回上级</a>{% endif %}
+  <button class="btn btn-primary btn-sm" onclick="document.getElementById('fileInput').click()">上传文件</button>
+</div>
+
+<div class="file-toolbar">
+  <div class="path-bar">
+    <input type="text" id="pathInput" value="{{ current_path }}" placeholder="/">
+    <button class="go" onclick="jumpToPath()">跳转</button>
+  </div>
+</div>
+
+<table class="file-table">
+  <thead><tr><th style="width:48%">名称</th><th style="width:12%">大小</th><th style="width:24%">修改时间</th><th style="width:80px">操作</th></tr></thead>
+  <tbody>
+    {% if parent %}
+    <tr class="back clickable" onclick="window.location='{{ url_for('file_manager.index', path=parent) }}'">
+      <td><span class="name">← 返回上级目录</span></td><td>—</td><td>—</td><td></td>
+    </tr>
+    {% endif %}
+    {% for entry in entries %}
+    <tr>
+      <td>
+        {% if entry.is_dir %}
+        <a class="name" href="{{ url_for('file_manager.index', path=entry.path) }}" style="text-decoration:none;">
+          ▣ {{ entry.name }}<span class="tag dir">目录</span>
+        </a>
+        {% else %}
+        <span class="name">▤ {{ entry.name }}
+          {% set ext = entry.name.rsplit('.',1)[-1].lower() if '.' in entry.name else '' %}
+          {% if ext %}<span class="tag">.{{ ext }}</span>{% endif %}
+        </span>
+        {% endif %}
+      </td>
+      <td>{% if not entry.is_dir %}{{ format_size(entry.size) }}{% else %}—{% endif %}</td>
+      <td>{{ format_time(entry.mtime) }}</td>
+      <td>
+        {% if not entry.is_dir %}<button class="btn btn-outline btn-xs" onclick="doDownload('{{ entry.path }}')">下载</button>{% endif %}
+        <button class="btn btn-danger btn-xs" onclick="doDelete('{{ entry.path }}','{{ entry.name }}')">删除</button>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:30px;">此目录为空</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="upload-zone" id="uploadZone">
+  <div style="font-size:22px;color:var(--text-dim);">▣</div>
+  <p>拖拽文件到此处上传，或点击选择文件</p>
+</div>
+
+<input type="file" id="fileInput" name="files" multiple style="display:none">
+<iframe id="dlFrame" style="display:none"></iframe>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const currentPath='{{ current_path|e }}';
+function jumpToPath(){var v=document.getElementById('pathInput').value.trim();if(v)window.location.href='{{ url_for('file_manager.index') }}?path='+encodeURIComponent(v)}
+function doDownload(p){document.getElementById('dlFrame').src='/api/download?path='+encodeURIComponent(p);showToast('开始下载')}
+function doDelete(p,n){if(!confirm('确定删除 "'+n+'" ？'))return;fetch('/api/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:p})}).then(function(r){return r.json()}).then(function(d){if(d.deleted){showToast('已删除: '+n);setTimeout(function(){window.location.reload()},500)}else{showToast('删除失败: '+(d.error||''))}})}
+function uploadFiles(fs){if(!fs.length)return;var f=new FormData();f.append('path',currentPath);for(var i=0;i<fs.length;i++)f.append('files',fs[i]);showToast('上传中...');fetch('/api/upload',{method:'POST',body:f}).then(function(r){return r.json()}).then(function(d){showToast('上传完成: '+d.count+' 个文件');setTimeout(function(){window.location.reload()},600)}).catch(function(e){showToast('上传失败: '+e.message)})}
+document.getElementById('pathInput').addEventListener('keydown',function(e){if(e.key==='Enter')jumpToPath()});
+var fi=document.getElementById('fileInput'),uz=document.getElementById('uploadZone');
+fi.addEventListener('change',function(){uploadFiles(fi.files);fi.value=''});
+document.querySelector('.btn-primary').addEventListener('click',function(){fi.click()});
+uz.addEventListener('click',function(){fi.click()});
+uz.addEventListener('dragover',function(e){e.preventDefault();uz.style.borderColor='var(--accent)';uz.style.background='var(--accent-dim)'});
+uz.addEventListener('dragleave',function(){uz.style.borderColor='';uz.style.background=''});
+uz.addEventListener('drop',function(e){e.preventDefault();uz.style.borderColor='';uz.style.background='';uploadFiles(e.dataTransfer.files)});
+</script>
+{% endblock %}

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 工具集 — 注册</title>
+<style>
+*,*::before,*::after{ margin:0; padding:0; box-sizing:border-box; }
+:root{
+  --accent:#4f8cff;
+  --accent-glow:rgba(79,140,255,.25);
+  --bg-page:#0b0d12;
+  --bg-card:#12151c;
+  --bg-elevated:#181c26;
+  --border:rgba(255,255,255,.06);
+  --text:#e8eaed;
+  --text-secondary:#8b8fa3;
+  --text-dim:#555a6a;
+  --danger:#f87171;
+  --success:#34d399;
+  --radius-sm:6px;
+}
+html,body{ height:100%; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; background:var(--bg-page); color:var(--text); }
+.login-page{
+  display:flex; align-items:center; justify-content:center;
+  min-height:100vh; position:relative; overflow:hidden;
+}
+.login-page::before{
+  content:''; position:absolute; inset:0;
+  background:
+    radial-gradient(ellipse 600px 400px at 20% 40%, rgba(79,140,255,.08) 0%, transparent 60%),
+    radial-gradient(ellipse 500px 500px at 80% 70%, rgba(79,140,255,.05) 0%, transparent 50%);
+  pointer-events:none;
+}
+.login-box{
+  position:relative; z-index:1;
+  width:380px; max-width:94vw;
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:40px 36px 32px;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);
+}
+.login-box .logo{ text-align:center; margin-bottom:32px; }
+.login-box .logo-icon{
+  width:48px; height:48px; border-radius:14px;
+  background:linear-gradient(135deg,var(--accent),#2563eb);
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:24px; margin-bottom:10px;
+  box-shadow:0 4px 12px rgba(79,140,255,.25);
+}
+.login-box h1{ font-size:18px; font-weight:600; color:var(--text); }
+.login-box p{ font-size:13px; color:var(--text-secondary); margin-top:2px; }
+.form-group{ margin-bottom:18px; }
+.form-group label{ display:block; font-size:12px; font-weight:500; color:var(--text-secondary); margin-bottom:5px; }
+.form-group input{
+  width:100%; padding:10px 14px; border-radius:var(--radius-sm);
+  background:var(--bg-elevated); border:1px solid var(--border);
+  color:var(--text); font-size:14px; outline:none; transition:border-color .2s;
+}
+.form-group input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(79,140,255,.1); }
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  padding:10px 20px; border-radius:var(--radius-sm); font-size:14px; font-weight:500;
+  cursor:pointer; border:none; outline:none;
+}
+.btn-primary{ background:var(--accent); color:#fff; width:100%; }
+.btn-primary:hover{ background:#3b7ae5; box-shadow:0 4px 14px rgba(79,140,255,.25); }
+.login-footer{ text-align:center; margin-top:20px; font-size:12px; color:#555a6a; }
+.login-footer a{ color:var(--accent); text-decoration:none; }
+.login-footer a:hover{ text-decoration:underline; }
+.flash-msg{
+  padding:8px 14px; border-radius:6px; font-size:12px; margin-bottom:14px;
+  background:var(--bg-elevated); border:1px solid var(--border);
+}
+.flash-msg.error{ border-color:rgba(248,113,113,.3); color:var(--danger); }
+.flash-msg.success{ border-color:rgba(52,211,153,.3); color:var(--success); }
+</style>
+</head>
+<body>
+<div class="login-page">
+  <div class="login-box">
+    <div class="logo">
+      <div class="logo-icon">🤖</div>
+      <h1>注册账号</h1>
+      <p>创建新的 AI 工具集账号</p>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <div class="flash-msg {{ category }}">{{ message }}</div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+    <form method="POST" action="{{ url_for('auth.register') }}">
+      <div class="form-group">
+        <label>用户名</label>
+        <input type="text" name="username" placeholder="请输入用户名" required>
+      </div>
+      <div class="form-group">
+        <label>密码</label>
+        <input type="password" name="password" placeholder="至少 4 位" required>
+      </div>
+      <div class="form-group">
+        <label>确认密码</label>
+        <input type="password" name="confirm" placeholder="再次输入密码" required>
+      </div>
+      <button type="submit" class="btn btn-primary">注 册</button>
+    </form>
+    <div class="login-footer">
+      已有账号？<a href="{{ url_for('auth.login') }}">返回登录</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

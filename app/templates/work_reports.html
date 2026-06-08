@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工作日报系统</title>
+<script>
+// Simple markdown renderer (no CDN needed)
+const marked = { parse: function(md) {
+  if (!md) return '';
+  return md
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/^### (.+)$/gm,'<h3>$1</h3>')
+    .replace(/^## (.+)$/gm,'<h2>$1</h2>')
+    .replace(/^# (.+)$/gm,'<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/^---$/gm,'<hr>')
+    .replace(/^\| (.+) \|$/gm, function(line) {
+      const cells = line.split('|').slice(1,-1).map(c=>c.trim());
+      const isHeader = false;
+      return '<tr>' + cells.map(c=>'<td>'+c+'</td>').join('') + '</tr>';
+    })
+    .replace(/(<tr>.*<\/tr>\n?)+/g, s => '<table>' + s + '</table>')
+    .replace(/^\- (.+)$/gm,'<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, s => '<ul>' + s + '</ul>')
+    .replace(/\n\n/g,'</p><p>')
+    .replace(/^(?!<[hultpr]|$)(.+)$/gm,'<p>$1</p>')
+    .replace(/<p><\/p>/g,'');
+}};
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d1117;color:#c9d1d9;font-family:"微软雅黑","PingFang SC",sans-serif;font-size:14px;min-height:100vh}
+/* Header */
+.header{background:#161b22;border-bottom:1px solid #21262d;padding:0 24px;display:flex;align-items:center;height:56px;gap:16px}
+.header-logo{font-size:16px;font-weight:700;color:#fff;letter-spacing:1px}
+.header-logo span{color:#7941EA}
+.header-sub{color:#6e7681;font-size:12px}
+/* Tabs */
+.tabs{display:flex;gap:2px;margin-left:auto}
+.tab{padding:8px 20px;border-radius:6px;cursor:pointer;color:#8b949e;font-size:13px;transition:all .2s;border:none;background:none}
+.tab:hover{color:#c9d1d9;background:#21262d}
+.tab.active{color:#fff;background:#21262d;font-weight:600}
+/* Main */
+.main{max-width:960px;margin:0 auto;padding:24px 16px}
+.panel{display:none}
+.panel.active{display:block}
+/* Section title */
+.sec-title{font-size:15px;font-weight:700;color:#fff;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.sec-title .badge{background:#7941EA;color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:400}
+/* Card */
+.card{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:20px;margin-bottom:16px}
+/* Input row */
+.input-row{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.input-row input,.input-row select{background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:8px 12px;font-size:13px;font-family:inherit}
+.input-row input{flex:1;min-width:200px}
+.input-row select{min-width:130px}
+.input-row input:focus,.input-row select:focus{outline:none;border-color:#7941EA}
+/* Type toggle */
+.type-toggle{display:flex;gap:8px;margin-bottom:16px}
+.type-btn{flex:1;padding:12px;border-radius:8px;border:2px solid #30363d;background:#0d1117;color:#8b949e;cursor:pointer;font-size:13px;font-family:inherit;font-weight:600;transition:all .2s;text-align:center}
+.type-btn:hover{border-color:#7941EA;color:#c9d1d9}
+.type-btn.active.delivery{border-color:#1E88E5;background:#1E88E515;color:#1E88E5}
+.type-btn.active.testing{border-color:#43A047;background:#43A04715;color:#43A047}
+/* Buttons */
+.btn{padding:8px 18px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-family:inherit;font-weight:600;transition:all .2s}
+.btn-primary{background:#7941EA;color:#fff}
+.btn-primary:hover{background:#9B6AF5}
+.btn-green{background:#238636;color:#fff}
+.btn-green:hover{background:#2ea043}
+.btn-outline{background:transparent;border:1px solid #30363d;color:#8b949e}
+.btn-outline:hover{border-color:#7941EA;color:#c9d1d9}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn-danger{background:transparent;border:1px solid #da3633;color:#da3633}
+.btn-danger:hover{background:#da363315}
+/* Note list */
+.note-list{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.note-item{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:#0d1117;border-radius:6px;border:1px solid #21262d}
+.note-type-tag{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700;white-space:nowrap;margin-top:2px}
+.tag-delivery{background:#1E88E520;color:#1E88E5;border:1px solid #1E88E540}
+.tag-testing{background:#43A04720;color:#43A047;border:1px solid #43A04740}
+.note-proj{color:#7941EA;font-size:11px;font-weight:700;margin-right:6px}
+.note-content{flex:1;color:#c9d1d9;line-height:1.5}
+.note-time{color:#484f58;font-size:11px;white-space:nowrap}
+.note-del{background:none;border:none;color:#484f58;cursor:pointer;font-size:14px;padding:0 4px}
+.note-del:hover{color:#da3633}
+/* Report area */
+.report-md{background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:20px;line-height:1.8;min-height:200px}
+.report-md h1{font-size:18px;color:#fff;border-bottom:1px solid #21262d;padding-bottom:10px;margin-bottom:16px}
+.report-md h2{font-size:14px;color:#7941EA;margin:18px 0 8px}
+.report-md h3{font-size:13px;color:#8b949e;margin:10px 0 4px}
+.report-md strong{color:#c9d1d9}
+.report-md p{color:#8b949e;margin:4px 0}
+.report-md ul{padding-left:18px;color:#c9d1d9}
+.report-md li{margin:3px 0}
+.report-md table{width:100%;border-collapse:collapse;margin:12px 0}
+.report-md th{background:#161b22;color:#8b949e;padding:8px 12px;text-align:left;border:1px solid #21262d;font-size:12px}
+.report-md td{padding:7px 12px;border:1px solid #21262d;color:#c9d1d9;font-size:13px}
+.report-md hr{border:none;border-top:1px solid #21262d;margin:16px 0}
+.report-md em{color:#484f58;font-size:12px}
+/* Date nav */
+.date-nav{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.date-nav input{background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:6px 12px;font-size:13px}
+.date-nav input:focus{outline:none;border-color:#7941EA}
+/* History list */
+.hist-list{display:flex;flex-direction:column;gap:6px}
+.hist-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#0d1117;border:1px solid #21262d;border-radius:6px;cursor:pointer;transition:all .2s}
+.hist-item:hover{border-color:#7941EA;background:#7941EA10}
+.hist-item-title{font-weight:600;color:#c9d1d9}
+.hist-item-sub{color:#484f58;font-size:12px}
+/* Project management */
+.proj-chip{display:inline-flex;align-items:center;gap:6px;background:#21262d;border:1px solid #30363d;border-radius:16px;padding:4px 12px 4px 14px;font-size:12px;color:#c9d1d9;margin:4px}
+.proj-chip button{background:none;border:none;color:#484f58;cursor:pointer;font-size:14px;line-height:1;padding:0}
+.proj-chip button:hover{color:#da3633}
+.kupdates{border-top:1px solid #21262d;margin-top:8px;padding-top:8px;display:flex;flex-direction:column;gap:4px}
+.kupdate{font-size:12px;color:#8b949e;line-height:1.4}
+.kupdate-time{color:#484f58;font-size:11px;margin-right:6px;font-family:monospace}
+/* Kanban */
+.kanban-board{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:4px}
+.kanban-col{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:14px;min-height:300px}
+.kanban-col-title{font-size:13px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.kanban-col-title .cnt{background:#21262d;color:#8b949e;font-size:11px;padding:1px 7px;border-radius:10px;font-weight:400}
+.k-todo .kanban-col-title{color:#8b949e}
+.k-doing .kanban-col-title{color:#1E88E5}
+.k-done .kanban-col-title{color:#43A047}
+.kcard{background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:10px 12px;margin-bottom:8px;transition:border-color .2s}
+.kcard:hover{border-color:#30363d}
+.kcard-title{font-size:13px;color:#c9d1d9;font-weight:600;margin-bottom:4px;line-height:1.4}
+.kcard-note{font-size:12px;color:#6e7681;margin-bottom:8px;line-height:1.4}
+.kcard-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.kcard-actions{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+.pri-high{background:#da363320;color:#f85149;border:1px solid #da363340;font-size:10px;padding:1px 7px;border-radius:4px;font-weight:700}
+.pri-mid{background:#FB8C0020;color:#FB8C00;border:1px solid #FB8C0040;font-size:10px;padding:1px 7px;border-radius:4px;font-weight:700}
+.pri-low{background:#43A04720;color:#43A047;border:1px solid #43A04740;font-size:10px;padding:1px 7px;border-radius:4px;font-weight:700}
+.kcard-date{color:#484f58;font-size:11px}
+@media(max-width:700px){.kanban-board{grid-template-columns:1fr}}
+/* Toast */
+.toast{position:fixed;top:20px;right:20px;background:#238636;color:#fff;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+/* Two col */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.two-col{grid-template-columns:1fr}.tabs{gap:0}.tab{padding:8px 12px;font-size:12px}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo"><span>●</span> 工作日报系统</div>
+  <div class="header-sub">碎片记录 · 智能整理 · 自动周报</div>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('record')">📝 今日记录</button>
+    <button class="tab" onclick="switchTab('daily')">📄 日报</button>
+    <button class="tab" onclick="switchTab('weekly')">📊 周报</button>
+    <button class="tab" onclick="switchTab('kanban')">📋 看板</button>
+    <button class="tab" onclick="switchTab('history')">📁 历史</button>
+    <button class="tab" onclick="switchTab('settings')">⚙️ 设置</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ── 今日记录 ── -->
+  <div class="panel active" id="panel-record">
+    <div class="card">
+      <div class="sec-title">添加工作记录 <span class="badge" id="today-badge">今天</span></div>
+      <div class="type-toggle">
+        <button class="type-btn active delivery" id="btn-delivery" onclick="selectType('project_delivery')">🔧 项目交付</button>
+        <button class="type-btn testing" id="btn-testing" onclick="selectType('product_testing')">🧪 产品测试</button>
+      </div>
+      <div class="input-row">
+        <select id="sel-project"></select>
+        <input id="inp-content" placeholder="描述今天做了什么…（按 Enter 提交）" onkeydown="if(event.key==='Enter')addNote()">
+        <button class="btn btn-primary" onclick="addNote()">添加</button>
+      </div>
+      <div id="testing-tip" style="display:none;color:#6e7681;font-size:12px;margin-top:-6px;margin-bottom:4px">🧪 产品测试不区分项目，直接填写需求内容即可</div>
+    </div>
+
+    <div id="note-list-wrap">
+      <div class="sec-title" style="margin-top:8px">今日记录 <span class="badge" id="note-count">0</span></div>
+      <div class="note-list" id="note-list"></div>
+      <div class="empty" id="note-empty" style="display:none">暂无记录，开始添加今天的工作吧</div>
+    </div>
+  </div>
+
+  <!-- ── 日报 ── -->
+  <div class="panel" id="panel-daily">
+    <div class="card">
+      <div class="sec-title">生成日报</div>
+      <div class="date-nav">
+        <input type="date" id="daily-date">
+        <button class="btn btn-green" onclick="genDaily()">⚡ 生成日报</button>
+        <button class="btn btn-outline" onclick="loadDaily()">查看已有</button>
+        <button class="btn btn-outline" onclick="downloadReport('daily')">↓ 下载</button>
+      </div>
+    </div>
+    <div class="report-md" id="daily-report"><div class="empty">选择日期并点击「生成日报」</div></div>
+  </div>
+
+  <!-- ── 周报 ── -->
+  <div class="panel" id="panel-weekly">
+    <div class="card">
+      <div class="sec-title">生成周报</div>
+      <div class="date-nav">
+        <label style="color:#8b949e;font-size:13px">年份</label>
+        <input type="number" id="weekly-year" style="width:80px" min="2024" max="2099">
+        <label style="color:#8b949e;font-size:13px">第</label>
+        <input type="number" id="weekly-week" style="width:70px" min="1" max="53">
+        <label style="color:#8b949e;font-size:13px">周</label>
+        <button class="btn btn-green" onclick="genWeekly()">⚡ 生成周报</button>
+        <button class="btn btn-outline" onclick="loadWeekly()">查看已有</button>
+        <button class="btn btn-outline" onclick="downloadReport('weekly')">↓ 下载</button>
+      </div>
+    </div>
+    <div class="report-md" id="weekly-report"><div class="empty">选择年份和周数，点击「生成周报」</div></div>
+  </div>
+
+  <!-- ── 看板 ── -->
+  <div class="panel" id="panel-kanban">
+    <div class="card">
+      <div class="sec-title">新增任务</div>
+      <div class="input-row">
+        <input id="k-title" placeholder="任务标题…" style="flex:2" onkeydown="if(event.key==='Enter')addKanban()">
+        <input id="k-note" placeholder="备注（可选）" style="flex:2">
+        <select id="k-pri">
+          <option value="高">🔴 高优先级</option>
+          <option value="中" selected>🟡 中优先级</option>
+          <option value="低">🟢 低优先级</option>
+        </select>
+        <button class="btn btn-primary" onclick="addKanban()">添加</button>
+      </div>
+    </div>
+    <div class="kanban-board">
+      <div class="kanban-col k-todo">
+        <div class="kanban-col-title">📋 待办 <span class="cnt" id="cnt-todo">0</span></div>
+        <div id="col-todo"></div>
+      </div>
+      <div class="kanban-col k-doing">
+        <div class="kanban-col-title">🔄 进行中 <span class="cnt" id="cnt-doing">0</span></div>
+        <div id="col-doing"></div>
+      </div>
+      <div class="kanban-col k-done">
+        <div class="kanban-col-title">✅ 已完成 <span class="cnt" id="cnt-done">0</span></div>
+        <div id="col-done"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 历史 ── -->
+  <div class="panel" id="panel-history">
+    <div class="two-col">
+      <div>
+        <div class="sec-title">历史日报</div>
+        <div class="hist-list" id="hist-daily"></div>
+        <div class="empty" id="hist-daily-empty" style="display:none">暂无历史日报</div>
+      </div>
+      <div>
+        <div class="sec-title">历史周报</div>
+        <div class="hist-list" id="hist-weekly"></div>
+        <div class="empty" id="hist-weekly-empty" style="display:none">暂无历史周报</div>
+      </div>
+    </div>
+    <div class="report-md" id="hist-report" style="margin-top:16px;display:none"></div>
+  </div>
+
+  <!-- ── 设置 ── -->
+  <div class="panel" id="panel-settings">
+    <div class="card">
+      <div class="sec-title">项目管理</div>
+      <div id="proj-chips" style="margin-bottom:14px"></div>
+      <div class="input-row">
+        <input id="inp-proj" placeholder="新增项目名称…" onkeydown="if(event.key==='Enter')addProject()">
+        <button class="btn btn-primary" onclick="addProject()">添加项目</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BASE = window.location.pathname.replace(/\/+$/, '');
+const api = (path, opts={}) => fetch(BASE + '/api' + path, opts).then(r => r.json());
+
+let currentType = 'project_delivery';
+let todayStr = new Date().toISOString().slice(0, 10);
+
+function toast(msg, ok=true) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = ok ? '#238636' : '#da3633';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const idx = ['record','daily','weekly','kanban','history','settings'].indexOf(name);
+  document.querySelectorAll('.tab')[idx].classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'history') loadHistory();
+  if (name === 'kanban') loadKanban();
+}
+
+// ── Type selection ──────────────────────────────────────────────
+function selectType(t) {
+  currentType = t;
+  document.getElementById('btn-delivery').classList.toggle('active', t === 'project_delivery');
+  document.getElementById('btn-testing').classList.toggle('active', t === 'product_testing');
+  const isTesting = t === 'product_testing';
+  document.getElementById('sel-project').style.display = isTesting ? 'none' : '';
+  document.getElementById('testing-tip').style.display = isTesting ? '' : 'none';
+  document.getElementById('inp-content').placeholder = isTesting
+    ? '描述你测试的需求内容…（按 Enter 提交）'
+    : '描述今天做了什么…（按 Enter 提交）';
+}
+
+// ── Projects ────────────────────────────────────────────────────
+async function loadProjects() {
+  const projects = await api('/projects');
+  // populate select
+  const sel = document.getElementById('sel-project');
+  sel.innerHTML = projects.map(p => `<option value="${p}">${p}</option>`).join('');
+  // populate chips in settings
+  const chips = document.getElementById('proj-chips');
+  chips.innerHTML = projects.map(p =>
+    `<span class="proj-chip">${p}<button onclick="delProject('${p}')">×</button></span>`
+  ).join('');
+}
+
+async function addProject() {
+  const name = document.getElementById('inp-proj').value.trim();
+  if (!name) return;
+  await api('/projects', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name})});
+  document.getElementById('inp-proj').value = '';
+  loadProjects();
+  toast('已添加项目：' + name);
+}
+
+async function delProject(name) {
+  if (!confirm(`确认删除项目「${name}」？`)) return;
+  await api('/projects/' + encodeURIComponent(name), {method:'DELETE'});
+  loadProjects();
+  toast('已删除：' + name);
+}
+
+// ── Notes ───────────────────────────────────────────────────────
+async function loadNotes() {
+  const notes = await api('/notes/' + todayStr);
+  renderNotes(notes);
+}
+
+function renderNotes(notes) {
+  const list = document.getElementById('note-list');
+  const empty = document.getElementById('note-empty');
+  document.getElementById('note-count').textContent = notes.length;
+  if (!notes.length) { list.innerHTML = ''; empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  const typeLabel = {project_delivery:'项目交付', product_testing:'产品测试'};
+  const tagClass  = {project_delivery:'tag-delivery', product_testing:'tag-testing'};
+  list.innerHTML = notes.map(n => `
+    <div class="note-item">
+      <span class="note-type-tag ${tagClass[n.type]||'tag-delivery'}">${typeLabel[n.type]||n.type}</span>
+      <span class="note-content"><span class="note-proj">[${n.project}]</span>${n.content}</span>
+      <span class="note-time">${n.created_at ? n.created_at.slice(11,16) : ''}</span>
+      <button class="note-del" onclick="delNote('${n.id}')">🗑</button>
+    </div>`).join('');
+}
+
+async function addNote() {
+  const content = document.getElementById('inp-content').value.trim();
+  const project = currentType === 'product_testing'
+    ? '产品测试'
+    : document.getElementById('sel-project').value;
+  if (!content) { toast('请输入工作内容', false); return; }
+  await api('/notes', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({type: currentType, project, content, date: todayStr})
+  });
+  document.getElementById('inp-content').value = '';
+  loadNotes();
+  toast('记录已添加 ✓');
+}
+
+async function delNote(id) {
+  await api(`/notes/${todayStr}/${id}`, {method:'DELETE'});
+  loadNotes();
+}
+
+// ── Daily ───────────────────────────────────────────────────────
+async function genDaily() {
+  const d = document.getElementById('daily-date').value || todayStr;
+  const r = await api(`/daily/${d}`, {method:'POST'});
+  document.getElementById('daily-report').innerHTML = marked.parse(r.content);
+  toast('日报生成完成 ✓');
+}
+
+async function loadDaily() {
+  const d = document.getElementById('daily-date').value || todayStr;
+  const r = await api(`/daily/${d}`);
+  if (r.exists) {
+    document.getElementById('daily-report').innerHTML = marked.parse(r.content);
+  } else {
+    document.getElementById('daily-report').innerHTML = '<div class="empty">该日期暂无日报，请先生成</div>';
+  }
+}
+
+function downloadReport(type) {
+  let content, filename;
+  if (type === 'daily') {
+    const d = document.getElementById('daily-date').value || todayStr;
+    filename = `日报_${d}.md`;
+    content = document.getElementById('daily-report').innerText;
+  } else {
+    const y = document.getElementById('weekly-year').value;
+    const w = document.getElementById('weekly-week').value;
+    filename = `周报_${y}-W${w}.md`;
+    content = document.getElementById('weekly-report').innerText;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], {type:'text/markdown'}));
+  a.download = filename;
+  a.click();
+}
+
+// ── Weekly ──────────────────────────────────────────────────────
+async function genWeekly() {
+  const y = document.getElementById('weekly-year').value;
+  const w = document.getElementById('weekly-week').value;
+  const r = await api(`/weekly/${y}/${w}`, {method:'POST'});
+  document.getElementById('weekly-report').innerHTML = marked.parse(r.content);
+  toast('周报生成完成 ✓');
+}
+
+async function loadWeekly() {
+  const y = document.getElementById('weekly-year').value;
+  const w = document.getElementById('weekly-week').value;
+  const r = await api(`/weekly/${y}/${w}`);
+  if (r.exists) {
+    document.getElementById('weekly-report').innerHTML = marked.parse(r.content);
+  } else {
+    document.getElementById('weekly-report').innerHTML = '<div class="empty">该周暂无周报，请先生成</div>';
+  }
+}
+
+// ── History ─────────────────────────────────────────────────────
+async function loadHistory() {
+  const [dailyList, weeklyList] = await Promise.all([api('/history/daily'), api('/history/weekly')]);
+  const hd = document.getElementById('hist-daily');
+  const hw = document.getElementById('hist-weekly');
+  document.getElementById('hist-daily-empty').style.display = dailyList.length ? 'none' : '';
+  document.getElementById('hist-weekly-empty').style.display = weeklyList.length ? 'none' : '';
+  hd.innerHTML = dailyList.map(d => `
+    <div class="hist-item" onclick="viewHist('daily','${d}')">
+      <span class="hist-item-title">📄 ${d}</span>
+      <span class="hist-item-sub">日报</span>
+    </div>`).join('');
+  hw.innerHTML = weeklyList.map(w => `
+    <div class="hist-item" onclick="viewHist('weekly','${w}')">
+      <span class="hist-item-title">📊 ${w}</span>
+      <span class="hist-item-sub">周报</span>
+    </div>`).join('');
+}
+
+async function viewHist(type, key) {
+  let r;
+  if (type === 'daily') {
+    r = await api(`/daily/${key}`);
+  } else {
+    const [year, weekPart] = key.split('-W');
+    r = await api(`/weekly/${year}/${parseInt(weekPart)}`);
+  }
+  const el = document.getElementById('hist-report');
+  el.style.display = 'block';
+  el.innerHTML = marked.parse(r.content || '');
+  el.scrollIntoView({behavior:'smooth'});
+}
+
+// ── Kanban ──────────────────────────────────────────────────────
+const PRI_CLASS = {高:'pri-high', 中:'pri-mid', 低:'pri-low'};
+const STATUS_NEXT = {todo:'doing', doing:'done', done:'todo'};
+const STATUS_LABEL = {todo:'→ 进行中', doing:'→ 已完成', done:'→ 待办'};
+const STATUS_BACK = {doing:'← 退回待办', done:'← 退回进行中'};
+const STATUS_BACK_TARGET = {doing:'todo', done:'doing'};
+
+async function loadKanban() {
+  const tasks = await api('/kanban');
+  const groups = {todo:[], doing:[], done:[]};
+  tasks.forEach(t => (groups[t.status] || groups.todo).push(t));
+  ['todo','doing','done'].forEach(s => {
+    document.getElementById('cnt-'+s).textContent = groups[s].length;
+    document.getElementById('col-'+s).innerHTML = groups[s].length
+      ? groups[s].map(renderKcard).join('')
+      : '<div class="empty" style="padding:20px 0">暂无任务</div>';
+  });
+}
+
+function renderKcard(t) {
+  const priClass = PRI_CLASS[t.priority] || 'pri-mid';
+  const date = t.created_at ? t.created_at.slice(0,10) : '';
+  const backBtn = STATUS_BACK[t.status]
+    ? `<button class="btn btn-outline btn-sm" onclick="moveKanban('${t.id}','${STATUS_BACK_TARGET[t.status]}')">${STATUS_BACK[t.status]}</button>` : '';
+  const updates = (t.updates || []).map(u =>
+    `<div class="kupdate"><span class="kupdate-time">${u.time}</span>${u.text}</div>`
+  ).join('');
+  return `<div class="kcard">
+    <div class="kcard-title">${t.title}</div>
+    ${t.note ? `<div class="kcard-note">${t.note}</div>` : ''}
+    <div class="kcard-meta">
+      <span class="${priClass}">${t.priority}</span>
+      <span class="kcard-date">${date}</span>
+    </div>
+    ${updates ? `<div class="kupdates">${updates}</div>` : ''}
+    <div class="knote-input" id="kinput-${t.id}" style="display:none;margin-top:8px">
+      <div class="input-row" style="margin-bottom:0;gap:6px">
+        <input id="knote-${t.id}" placeholder="添加进度备注…" style="flex:1;font-size:12px;padding:5px 8px"
+          onkeydown="if(event.key==='Enter')submitNote('${t.id}')">
+        <button class="btn btn-green btn-sm" onclick="submitNote('${t.id}')">保存</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleNote('${t.id}')">取消</button>
+      </div>
+    </div>
+    <div class="kcard-actions">
+      ${t.status !== 'done' ? `<button class="btn btn-green btn-sm" onclick="moveKanban('${t.id}','${STATUS_NEXT[t.status]}')">${STATUS_LABEL[t.status]}</button>` : ''}
+      ${backBtn}
+      <button class="btn btn-outline btn-sm" onclick="toggleNote('${t.id}')">📝 备注</button>
+      <button class="btn btn-danger btn-sm" onclick="delKanban('${t.id}')">删除</button>
+    </div>
+  </div>`;
+}
+
+async function addKanban() {
+  const title = document.getElementById('k-title').value.trim();
+  if (!title) { toast('请输入任务标题', false); return; }
+  const note = document.getElementById('k-note').value.trim();
+  const priority = document.getElementById('k-pri').value;
+  await api('/kanban', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({title, note, priority})
+  });
+  document.getElementById('k-title').value = '';
+  document.getElementById('k-note').value = '';
+  loadKanban();
+  toast('任务已添加 ✓');
+}
+
+function toggleNote(id) {
+  const el = document.getElementById('kinput-' + id);
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+  if (el.style.display !== 'none') document.getElementById('knote-' + id).focus();
+}
+
+async function submitNote(id) {
+  const text = document.getElementById('knote-' + id).value.trim();
+  if (!text) return;
+  await api(`/kanban/${id}`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({append_note: text})
+  });
+  loadKanban();
+  toast('备注已保存 ✓');
+}
+
+async function moveKanban(id, status) {
+  await api(`/kanban/${id}`, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({status})
+  });
+  loadKanban();
+}
+
+async function delKanban(id) {
+  if (!confirm('确认删除这条任务？')) return;
+  await api(`/kanban/${id}`, {method:'DELETE'});
+  loadKanban();
+  toast('已删除');
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+function initWeekPicker() {
+  const now = new Date();
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const weekNo = Math.ceil(((now - startOfYear) / 86400000 + startOfYear.getDay() + 1) / 7);
+  document.getElementById('weekly-year').value = now.getFullYear();
+  document.getElementById('weekly-week').value = weekNo;
+  document.getElementById('daily-date').value = todayStr;
+  document.getElementById('today-badge').textContent = todayStr;
+}
+
+(async () => {
+  initWeekPicker();
+  await loadProjects();
+  await loadNotes();
+})();
+</script>
+</body>
+</html>
