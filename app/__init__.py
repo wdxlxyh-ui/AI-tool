@@ -21,12 +21,14 @@ def create_app():
     from .simulator_manager import sm_bp
     from .sftp_manager import sftp_bp
     from .work_reports import wr_bp
+    from .ems_deploy import ed_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(fm_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(sm_bp)
     app.register_blueprint(sftp_bp)
     app.register_blueprint(wr_bp)
+    app.register_blueprint(ed_bp)
 
     # Root redirect
     @app.route('/')

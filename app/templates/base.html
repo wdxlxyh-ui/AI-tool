@@ -186,6 +186,9 @@ a:hover{ text-decoration:underline; }
         <a class="nav-item {% if active_page == 'simulator' %}active{% endif %}" href="{{ url_for('simulator.index') }}">
           <span class="icon">◈</span><span>模拟器管理</span>
         </a>
+        <a class="nav-item {% if active_page == 'ems_deploy' %}active{% endif %}" href="{{ url_for('ems_deploy.index') }}">
+          <span class="icon">⬡</span><span>Edge-EMS 部署</span>
+        </a>
         <a class="nav-item {% if active_page == 'sftp' %}active{% endif %}" href="{{ url_for('sftp.index') }}">
           <span class="icon">⇄</span><span>SFTP 传输</span>
         </a>

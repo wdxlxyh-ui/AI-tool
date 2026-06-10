@@ -54,7 +54,7 @@ def get_system_stats(base_dir):
             stats['uptime'] = f'{d}天{h}小时'
     except: stats['uptime'] = '未知'
 
-    stats['tool_count'] = 6
+    stats['tool_count'] = 7
     return stats
 
 @dashboard_bp.route('/dashboard')

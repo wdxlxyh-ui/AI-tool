@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edge-EMS 部署 — 交互原型</title>
+<style>
+:root{
+  --nav-w:220px;
+  --bg-page:#0f1117;
+  --bg-card:#1a1d27;
+  --bg-elevated:#222530;
+  --bg-hover:#2a2d38;
+  --border:rgba(255,255,255,.06);
+  --border-light:rgba(255,255,255,.08);
+  --accent:#4b8cf7;
+  --accent-glow:rgba(75,140,247,.15);
+  --accent-dim:rgba(75,140,247,.08);
+  --text:#e1e4e8;
+  --text-secondary:#8b8fa3;
+  --text-dim:#555a6a;
+  --danger:#f85149;
+  --danger-bg:rgba(248,81,73,.1);
+  --success:#3fb950;
+  --success-bg:rgba(63,185,80,.1);
+  --warning:#d29922;
+  --warning-bg:rgba(210,153,34,.1);
+  --radius:8px;
+  --radius-sm:6px;
+  --transition:150ms ease;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg-page);color:var(--text);font-size:13px;line-height:1.6;}
+::-webkit-scrollbar{width:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:4px;}
+a{color:var(--accent);text-decoration:none;}
+.app-layout{display:flex;height:100vh;overflow:hidden;}
+
+/* Sidebar */
+.sidebar{width:var(--nav-w);min-width:var(--nav-w);background:var(--bg-card);border-right:1px solid var(--border);display:flex;flex-direction:column;}
+.sidebar-header{padding:20px 18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;}
+.sidebar-header .logo{width:32px;height:32px;border-radius:7px;background:var(--accent-dim);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0;}
+.sidebar-header .brand{font-size:14px;font-weight:600;color:var(--text);}
+.sidebar-header .brand small{display:block;font-size:9px;font-weight:400;color:var(--text-dim);margin-top:1px;}
+.sidebar-nav{flex:1;padding:12px 10px;overflow-y:auto;}
+.nav-section{margin-bottom:20px;}
+.nav-section-title{font-size:9px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;padding:0 8px;margin-bottom:6px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);font-size:13px;color:var(--text-secondary);cursor:pointer;transition:background var(--transition),color var(--transition);}
+.nav-item:hover{background:var(--bg-hover);color:var(--text);}
+.nav-item.active{background:var(--accent-dim);color:var(--accent);font-weight:500;}
+.nav-item .icon{width:20px;text-align:center;font-size:14px;flex-shrink:0;}
+.sidebar-footer{padding:14px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.sidebar-footer .avatar{width:30px;height:30px;border-radius:7px;background:var(--accent-dim);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;}
+.sidebar-footer .user-name{font-size:12px;color:var(--text);flex:1;}
+
+/* Main */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+.topbar{height:50px;min-height:50px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--border);background:var(--bg-card);}
+.topbar h2{font-size:14px;font-weight:600;}
+.topbar p{font-size:11px;color:var(--text-dim);margin-top:1px;}
+.content{flex:1;overflow-y:auto;padding:24px;animation:fadeIn .45s ease-out;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+/* Tabs */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px;}
+.tab-btn{padding:10px 20px;font-size:13px;color:var(--text-secondary);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:color .15s,border-color .15s;font-weight:500;}
+.tab-btn:hover{color:var(--text);}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* Config bar */
+.config-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;}
+.config-bar .left{display:flex;align-items:center;gap:12px;}
+.config-status{display:flex;align-items:center;gap:6px;font-size:11px;}
+.config-status .dot{width:7px;height:7px;border-radius:50%;}
+.config-status .dot.on{background:var(--success);}
+.config-status .dot.off{background:var(--danger);}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;transition:background var(--transition),color var(--transition),border-color var(--transition),opacity var(--transition);border:1px solid transparent;white-space:nowrap;font-family:inherit;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:#5a9af7;}
+.btn-danger{background:var(--danger-bg);color:var(--danger);}
+.btn-danger:hover{background:rgba(248,81,73,.18);}
+.btn-warning{background:var(--warning-bg);color:var(--warning);}
+.btn-outline{background:transparent;color:var(--text-secondary);border-color:var(--border-light);}
+.btn-outline:hover{background:var(--bg-hover);color:var(--text);}
+.btn-sm{padding:5px 10px;font-size:11px;}
+.btn-xs{padding:3px 8px;font-size:10px;border-radius:4px;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn .spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* Controls row */
+.controls-row{display:flex;gap:12px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap;}
+.ctrl-group{display:flex;flex-direction:column;gap:4px;}
+.ctrl-group label{font-size:11px;color:var(--text-dim);font-weight:500;}
+.ctrl-group select,.ctrl-group input[type=text]{padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:12px;outline:none;font-family:inherit;}
+.ctrl-group select:focus,.ctrl-group input:focus{border-color:var(--accent);}
+.server-toggle{display:flex;gap:0;}
+.server-toggle .srv-btn{padding:7px 16px;font-size:12px;background:var(--bg-elevated);color:var(--text-secondary);border:1px solid var(--border);cursor:pointer;transition:all .15s;font-family:inherit;}
+.server-toggle .srv-btn:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
+.server-toggle .srv-btn:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0;border-left:none;}
+.server-toggle .srv-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* Step cards */
+.step-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:12px;transition:border-color .2s;}
+.step-card:hover{border-color:var(--border-light);}
+.step-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.step-header .left{display:flex;align-items:center;gap:8px;}
+.step-number{width:24px;height:24px;border-radius:50%;background:var(--accent-dim);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
+.step-title{font-size:13px;font-weight:600;color:var(--text);}
+.step-arrow{text-align:center;color:var(--text-dim);font-size:18px;margin:4px 0 8px;}
+
+/* File info */
+.file-info{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:11px;margin-bottom:14px;padding:10px 14px;background:var(--bg-elevated);border-radius:var(--radius-sm);}
+.file-info .label{color:var(--text-dim);white-space:nowrap;}
+.file-info .value{color:var(--text-secondary);word-break:break-all;}
+.file-info .value .status-ok{color:var(--success);}
+.file-info .value .status-no{color:var(--danger);}
+
+/* Terminal */
+.terminal{background:#0b0d13;border:1px solid var(--border);border-radius:var(--radius);padding:14px;max-height:220px;overflow-y:auto;font-family:'SF Mono',Monaco,'Cascadia Code',monospace;font-size:11px;line-height:1.7;color:var(--text-secondary);margin-bottom:16px;display:none;}
+.terminal.active{display:block;}
+.terminal .t-header{display:flex;justify-content:space-between;margin-bottom:6px;font-family:inherit;}
+.terminal .t-header .t-title{font-weight:600;font-size:12px;}
+.terminal .t-header .t-status{color:var(--text-dim);font-size:11px;}
+.terminal .log-line{margin:0;}
+.log-ok{color:var(--success);}
+.log-err{color:var(--danger);}
+.log-warn{color:var(--warning);}
+.log-info{color:var(--text-secondary);}
+
+/* History table */
+.section-title{font-size:13px;font-weight:600;color:var(--text);margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.data-table{width:100%;border-collapse:collapse;font-size:12px;}
+.data-table th{text-align:left;padding:9px 12px;color:var(--text-dim);font-weight:500;font-size:11px;border-bottom:1px solid var(--border);}
+.data-table td{padding:9px 12px;color:var(--text-secondary);border-bottom:1px solid var(--border);}
+.data-table tr:hover td{background:var(--bg-hover);}
+.badge{font-size:9px;padding:2px 7px;border-radius:4px;display:inline-block;}
+.badge.ok{background:var(--success-bg);color:var(--success);}
+.badge.fail{background:var(--danger-bg);color:var(--danger);}
+.badge.warn{background:var(--warning-bg);color:var(--warning);}
+.badge.download{background:var(--accent-dim);color:var(--accent);}
+.badge.deploy{background:rgba(163,113,247,.1);color:#a371f7;}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;}
+.modal-overlay.open{opacity:1;visibility:visible;}
+.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;width:580px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 12px 48px rgba(0,0,0,.4);transform:scale(.92);transition:transform .3s cubic-bezier(.16,1,.3,1);}
+.modal-overlay.open .modal{transform:scale(1);}
+.modal h3{font-size:15px;font-weight:600;margin-bottom:16px;}
+.modal .form-group{margin-bottom:12px;}
+.modal .form-group label{display:block;font-size:11px;color:var(--text-secondary);margin-bottom:4px;}
+.modal .form-group input,.modal .form-group textarea{width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:12px;outline:none;font-family:inherit;}
+.modal .form-group textarea{resize:vertical;min-height:60px;font-family:'SF Mono',Monaco,monospace;font-size:11px;}
+.modal .form-group input:focus,.modal .form-group textarea:focus{border-color:var(--accent);}
+.modal .form-row{display:flex;gap:8px;}
+.modal .form-row>*{flex:1;}
+.modal-section-title{margin:16px 0 8px;font-size:12px;font-weight:600;color:var(--text);padding-top:12px;border-top:1px solid var(--border);}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;}
+.hint{font-size:10px;color:var(--text-dim);margin-top:4px;line-height:1.5;}
+.test-result{margin-top:6px;padding:6px 10px;border-radius:var(--radius-sm);font-size:11px;display:none;}
+.test-result.show{display:block;}
+.test-result.ok{background:var(--success-bg);color:var(--success);}
+.test-result.fail{background:var(--danger-bg);color:var(--danger);}
+.empty-state{text-align:center;padding:24px;color:var(--text-dim);font-size:12px;}
+</style>
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">AI</div>
+      <div class="brand">AI 工具集<small>v2.0</small></div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-section-title">概览</div>
+        <div class="nav-item"><span class="icon">◆</span><span>仪表盘</span></div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">工具</div>
+        <div class="nav-item"><span class="icon">▣</span><span>文件管理</span></div>
+        <div class="nav-item"><span class="icon">◈</span><span>模拟器管理</span></div>
+        <div class="nav-item active"><span class="icon">⬡</span><span>Edge-EMS 部署</span></div>
+        <div class="nav-item"><span class="icon">⇄</span><span>SFTP 传输</span></div>
+        <div class="nav-item"><span class="icon">📋</span><span>工作日报</span></div>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="avatar">A</div>
+      <div class="user-name">admin</div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <h2>Edge-EMS 部署</h2>
+        <p>配置 · 下载 · 部署</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);">
+        <span style="width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;"></span> admin
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- Config bar -->
+      <div class="config-bar">
+        <div class="left">
+          <div class="config-status">
+            <div class="dot" id="cfgDot"></div>
+            <span id="cfgStatus">检测中...</span>
+          </div>
+          <span style="font-size:11px;color:var(--text-dim);" id="cfgDetail"></span>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="openConfig()">⚙ 连接配置</button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('edge-ems')">edge-ems</button>
+        <button class="tab-btn" onclick="switchTab('edge-ems-hmi')">edge-ems-hmi</button>
+        <button class="tab-btn" onclick="switchTab('edge-ems-hmi-fe')">edge-ems-hmi-fe</button>
+      </div>
+
+      <!-- ====== edge-ems ====== -->
+      <div class="tab-panel active" id="panel-edge-ems">
+        <div class="controls-row">
+          <div class="ctrl-group">
+            <label>分支</label>
+            <select id="branch-1"><option>develop_2605</option><option>develop_25</option><option>develop_24</option><option>develop_23</option></select>
+          </div>
+          <div class="ctrl-group">
+            <label>服务器</label>
+            <div class="server-toggle">
+              <button class="srv-btn active" onclick="pickServer(this,'HPUY')">HPUY</button>
+              <button class="srv-btn" onclick="pickServer(this,'EE')">EE</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-header">
+            <div class="left"><div class="step-number">1</div><div class="step-title">从 Azure Blob 下载到本地</div></div>
+            <button class="btn btn-outline btn-sm" id="check1" onclick="checkBlob('edge-ems')">检查文件</button>
+          </div>
+          <div class="file-info" id="fileInfo1">
+            <span class="label">Blob 路径</span><span class="value" id="blob1">edgeftpfile/edge-ems/develop_2605/HPUY/edge-ems.tar.gz</span>
+            <span class="label">本地路径</span><span class="value" id="local1">/mnt/d/Blob/edgeftpfile/edge-ems/develop_2605/HPUY/edge-ems.tar.gz</span>
+            <span class="label">文件状态</span><span class="value"><span class="status-no">未检查</span></span>
+          </div>
+          <div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary btn-sm" onclick="simulateDownload('edge-ems')">从 Blob 下载</button></div>
+        </div>
+
+        <div class="step-arrow">↓</div>
+
+        <div class="step-card">
+          <div class="step-header">
+            <div class="left"><div class="step-number">2</div><div class="step-title">部署到远程服务器</div></div>
+          </div>
+          <div class="file-info">
+            <span class="label">目标服务器</span><span class="value">admin@192.168.1.100:9991</span>
+            <span class="label">远程目录</span><span class="value">/root/EMS/edge-ems/bin/</span>
+            <span class="label">操作</span><span class="value">上传 → 解压 → 恢复 config.xml → 修复权限</span>
+          </div>
+          <div style="display:flex;justify-content:flex-end;"><button class="btn btn-warning btn-sm" onclick="simulateDeploy('edge-ems')">部署到服务器</button></div>
+        </div>
+
+        <div class="terminal" id="term-1">
+          <div class="t-header"><span class="t-title" id="termTitle1">执行日志</span><span class="t-status" id="termStatus1"></span></div>
+          <div id="termLogs1"></div>
+        </div>
+      </div>
+
+      <!-- ====== edge-ems-hmi ====== -->
+      <div class="tab-panel" id="panel-edge-ems-hmi">
+        <div class="controls-row">
+          <div class="ctrl-group">
+            <label>分支</label>
+            <select id="branch-2"><option>develop_2605</option><option>develop_25</option><option>develop_24</option><option>develop_23</option></select>
+          </div>
+          <div class="ctrl-group">
+            <label>服务器</label>
+            <div class="server-toggle">
+              <button class="srv-btn active" onclick="pickServer(this,'HPUY')">HPUY</button>
+              <button class="srv-btn" onclick="pickServer(this,'EE')">EE</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-header">
+            <div class="left"><div class="step-number">1</div><div class="step-title">从 Azure Blob 下载到本地</div></div>
+            <button class="btn btn-outline btn-sm" onclick="checkBlob('edge-ems-hmi')">检查文件</button>
+          </div>
+          <div class="file-info" id="fileInfo2">
+            <span class="label">Blob 路径</span><span class="value" id="blob2">edgeftpfile/edge-ems-hmi/develop_2605/HPUY/edge-ems-hmi.tar.gz</span>
+            <span class="label">本地路径</span><span class="value" id="local2">/mnt/d/Blob/edgeftpfile/edge-ems-hmi/develop_2605/HPUY/edge-ems-hmi.tar.gz</span>
+            <span class="label">文件状态</span><span class="value"><span class="status-no">未检查</span></span>
+          </div>
+          <div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary btn-sm" onclick="simulateDownload('edge-ems-hmi')">从 Blob 下载</button></div>
+        </div>
+
+        <div class="step-arrow">↓</div>
+
+        <div class="step-card">
+          <div class="step-header">
+            <div class="left"><div class="step-number">2</div><div class="step-title">部署到远程服务器</div></div>
+          </div>
+          <div class="file-info">
+            <span class="label">目标服务器</span><span class="value">admin@192.168.1.100:9991</span>
+            <span class="label">远程目录</span><span class="value">/root/EMS/edge-ems-hmi/bin/</span>
+            <span class="label">操作</span><span class="value">上传 → 解压 → 修复权限</span>
+          </div>
+          <div style="display:flex;justify-content:flex-end;"><button class="btn btn-warning btn-sm" onclick="simulateDeploy('edge-ems-hmi')">部署到服务器</button></div>
+        </div>
+
+        <div class="terminal" id="term-2">
+          <div class="t-header"><span class="t-title" id="termTitle2">执行日志</span><span class="t-status" id="termStatus2"></span></div>
+          <div id="termLogs2"></div>
+        </div>
+      </div>
+
+      <!-- ====== edge-ems-hmi-fe ====== -->
+      <div class="tab-panel" id="panel-edge-ems-hmi-fe">
+        <div class="controls-row">
+          <div class="ctrl-group">
+            <label>分支</label>
+            <select id="branch-3"><option>develop_2605</option><option>develop_25</option><option>develop_24</option><option>develop_23</option></select>
+          </div>
+          <div class="ctrl-group">
+            <label>服务器</label>
+            <div class="server-toggle">
+              <button class="srv-btn active" onclick="pickServer(this,'HPUY')">HPUY</button>
+              <button class="srv-btn" onclick="pickServer(this,'EE')">EE</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-header">
+            <div class="left"><div class="step-number">1</div><div class="step-title">从 Azure Blob 下载到本地</div></div>
+            <button class="btn btn-outline btn-sm" onclick="checkBlob('edge-ems-hmi-fe')">检查文件</button>
+          </div>
+          <div class="file-info" id="fileInfo3">
+            <span class="label">Blob 路径</span><span class="value" id="blob3">edgeftpfile/edge-ems-hmi-fe/HPUY/logger/develop_2605/edge-ems-hmi-fe.zip</span>
+            <span class="label">Blob 目录</span><span class="value" id="blobDir3">HPUY → logger/ ｜ EE → app_portal/</span>
+            <span class="label">文件格式</span><span class="value">ZIP（非 tar.gz）</span>
+            <span class="label">本地路径</span><span class="value" id="local3">/mnt/d/Blob/edgeftpfile/edge-ems-hmi-fe/HPUY/logger/develop_2605/edge-ems-hmi-fe.zip</span>
+            <span class="label">文件状态</span><span class="value"><span class="status-no">未检查</span></span>
+          </div>
+          <div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary btn-sm" onclick="simulateDownload('edge-ems-hmi-fe')">从 Blob 下载</button></div>
+        </div>
+
+        <div class="step-arrow">↓</div>
+
+        <div class="step-card">
+          <div class="step-header">
+            <div class="left"><div class="step-number">2</div><div class="step-title">部署到远程服务器</div></div>
+          </div>
+          <div class="file-info">
+            <span class="label">目标服务器</span><span class="value">admin@192.168.1.100:9991</span>
+            <span class="label">远程目录</span><span class="value">/root/EMS/edge-ems-hmi-fe/</span>
+            <span class="label">操作</span><span class="value">上传 → unzip 解压 → 修复权限</span>
+          </div>
+          <div style="display:flex;justify-content:flex-end;"><button class="btn btn-warning btn-sm" onclick="simulateDeploy('edge-ems-hmi-fe')">部署到服务器</button></div>
+        </div>
+
+        <div class="terminal" id="term-3">
+          <div class="t-header"><span class="t-title" id="termTitle3">执行日志</span><span class="t-status" id="termStatus3"></div>
+          <div id="termLogs3"></div>
+        </div>
+      </div>
+
+      <!-- History (shared, filtered by tab) -->
+      <div class="section-title">部署历史</div>
+      <table class="data-table">
+        <thead><tr><th>时间</th><th>分支</th><th>服务器</th><th>操作</th><th>状态</th><th>耗时</th></tr></thead>
+        <tbody id="historyBody"><tr><td colspan="6" class="empty-state">暂无部署记录</td></tr></tbody>
+      </table>
+
+    </div>
+  </div>
+</div>
+
+<!-- Config Modal -->
+<div class="modal-overlay" id="configModal">
+  <div class="modal">
+    <h3>连接配置</h3>
+
+    <div class="modal-section-title" style="border-top:none;padding-top:0;">Azure Blob 连接</div>
+    <div class="form-group">
+      <label>账户名</label>
+      <input type="text" value="edgeadls2" disabled style="opacity:.6;">
+    </div>
+    <div class="form-group">
+      <label>容器</label>
+      <input type="text" value="edge" disabled style="opacity:.6;">
+    </div>
+    <div class="form-group">
+      <label>SAS Token</label>
+      <textarea id="cfgSas" placeholder="sv=2021-06-08&ss=b&srt=sco&sp=rl&se=2027-06-08T12:00:00Z&..."></textarea>
+      <div class="hint">从 Azure Portal → Storage Account → edgeadls2 → Shared access signature 生成。需要 Read + List 权限。</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button class="btn btn-outline btn-sm" onclick="testConnection()">测试连接</button>
+      <div class="test-result" id="testResult"></div>
+    </div>
+
+    <div class="modal-section-title">本地镜像目录</div>
+    <div class="form-group">
+      <input type="text" id="cfgMirror" value="/mnt/d/Blob" placeholder="Blob 下载后的本地保存路径">
+    </div>
+
+    <div class="modal-section-title">HPUY 服务器</div>
+    <div class="form-row">
+      <div class="form-group"><label>Host</label><input type="text" id="cfgHpuyHost" value="192.168.1.100"></div>
+      <div class="form-group" style="max-width:80px;"><label>Port</label><input type="number" id="cfgHpuyPort" value="9991"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>User</label><input type="text" id="cfgHpuyUser" value="admin"></div>
+      <div class="form-group"><label>Password</label><input type="password" id="cfgHpuyPw" placeholder="••••••••"></div>
+    </div>
+    <div class="form-group"><label>远程目录</label><input type="text" id="cfgHpuyDir" value="/root/EMS/"></div>
+
+    <div class="modal-section-title">EE 服务器</div>
+    <div class="form-row">
+      <div class="form-group"><label>Host</label><input type="text" id="cfgEeHost" value="10.0.0.100"></div>
+      <div class="form-group" style="max-width:80px;"><label>Port</label><input type="number" id="cfgEePort" value="9991"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>User</label><input type="text" id="cfgEeUser" value="root"></div>
+      <div class="form-group"><label>Password</label><input type="password" id="cfgEePw" placeholder="••••••••"></div>
+    </div>
+    <div class="form-group"><label>远程目录</label><input type="text" id="cfgEeDir" value="/home/envuser/energy-os/"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeConfig()">取消</button>
+      <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== State =====
+var currentTab = 'edge-ems';
+var currentServer = { 'edge-ems':'HPUY', 'edge-ems-hmi':'HPUY', 'edge-ems-hmi-fe':'HPUY' };
+var history = [];
+var configSaved = false;
+
+var BLOB_PATHS = {
+  'edge-ems':        { tpl:'edgeftpfile/edge-ems/{branch}/{server}/edge-ems.tar.gz', ext:'.tar.gz' },
+  'edge-ems-hmi':    { tpl:'edgeftpfile/edge-ems-hmi/{branch}/{server}/edge-ems-hmi.tar.gz', ext:'.tar.gz' },
+  'edge-ems-hmi-fe': { tpl:null, ext:'.zip' }
+};
+
+function getBlobPath(comp, branch, server) {
+  if (comp === 'edge-ems-hmi-fe') {
+    var dir = server === 'HPUY' ? 'HPUY/logger' : 'EE/app_portal';
+    return 'edgeftpfile/edge-ems-hmi-fe/' + dir + '/' + branch + '/edge-ems-hmi-fe.zip';
+  }
+  return BLOB_PATHS[comp].tpl.replace('{branch}', branch).replace('{server}', server);
+}
+
+function getTermId(comp) {
+  if (comp === 'edge-ems') return '1';
+  if (comp === 'edge-ems-hmi') return '2';
+  return '3';
+}
+
+// ===== Tabs =====
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+  event.target.classList.add('active');
+  document.getElementById('panel-' + tab).classList.add('active');
+  renderHistory();
+}
+
+// ===== Server toggle =====
+function pickServer(btn, server) {
+  currentServer[currentTab] = server;
+  var siblings = btn.parentElement.querySelectorAll('.srv-btn');
+  siblings.forEach(function(s) { s.classList.remove('active'); });
+  btn.classList.add('active');
+  updatePaths();
+}
+
+function updatePaths() {
+  var comps = ['edge-ems', 'edge-ems-hmi', 'edge-ems-hmi-fe'];
+  comps.forEach(function(comp) {
+    var idx = getTermId(comp);
+    var branch = document.getElementById('branch-' + idx).value;
+    var server = currentServer[comp];
+    var blobPath = getBlobPath(comp, branch, server);
+    var el = document.getElementById('blob' + idx);
+    if (el) el.textContent = blobPath;
+    var loc = document.getElementById('local' + idx);
+    if (loc) loc.textContent = '/mnt/d/Blob/' + blobPath;
+  });
+}
+
+// Update paths when branch changes
+document.addEventListener('change', function(e) {
+  if (e.target.tagName === 'SELECT' && e.target.id && e.target.id.startsWith('branch-')) {
+    updatePaths();
+  }
+});
+
+// ===== Config =====
+function openConfig() {
+  document.getElementById('configModal').classList.add('open');
+}
+function closeConfig() {
+  document.getElementById('configModal').classList.remove('open');
+}
+document.getElementById('configModal').addEventListener('click', function(e) {
+  if (e.target === this) closeConfig();
+});
+
+function testConnection() {
+  var r = document.getElementById('testResult');
+  r.className = 'test-result show ok';
+  r.textContent = '✅ 连接成功 — 容器 "edge" 可访问';
+}
+
+function saveConfig() {
+  configSaved = true;
+  var dot = document.getElementById('cfgDot');
+  dot.className = 'dot on';
+  document.getElementById('cfgStatus').textContent = '已配置';
+  document.getElementById('cfgDetail').textContent = 'SAS Token: sv=2021-06-08... ｜ HPUY: 192.168.1.100 ｜ EE: 10.0.0.100';
+  closeConfig();
+  showToast('配置已保存');
+}
+
+// Init config status
+(function() {
+  var dot = document.getElementById('cfgDot');
+  dot.className = 'dot off';
+  document.getElementById('cfgStatus').textContent = '未配置';
+  document.getElementById('cfgDetail').textContent = '请先配置 SAS Token 和服务器信息';
+})();
+
+// ===== Check Blob =====
+function checkBlob(comp) {
+  var idx = getTermId(comp);
+  var branch = document.getElementById('branch-' + idx).value;
+  var server = currentServer[comp];
+  var blobPath = getBlobPath(comp, branch, server);
+
+  showToast('检查 Blob 文件...');
+  setTimeout(function() {
+    // Simulate: file exists for HPUY, not for EE
+    var exists = server === 'HPUY';
+    var fileInfo = document.getElementById('fileInfo' + idx);
+    var statusCells = fileInfo.querySelectorAll('.value');
+    var lastCell = statusCells[statusCells.length - 1];
+    if (exists) {
+      lastCell.innerHTML = '<span class="status-ok">✅ 文件存在 (234.5 MB)</span>';
+      showToast('文件存在: ' + (comp === 'edge-ems-hmi-fe' ? '156.2' : '234.5') + ' MB');
+    } else {
+      lastCell.innerHTML = '<span class="status-no">❌ 文件不存在</span>';
+      showToast('文件不存在，需要先下载', 'error');
+    }
+  }, 800);
+}
+
+// ===== Simulate download =====
+function simulateDownload(comp) {
+  var idx = getTermId(comp);
+  var term = document.getElementById('term-' + idx);
+  var logs = document.getElementById('termLogs' + idx);
+  var title = document.getElementById('termTitle' + idx);
+  var status = document.getElementById('termStatus' + idx);
+
+  term.classList.add('active');
+  logs.innerHTML = '';
+  title.textContent = '下载日志';
+  status.textContent = '运行中...';
+
+  var branch = document.getElementById('branch-' + idx).value;
+  var server = currentServer[comp];
+  var blobPath = getBlobPath(comp, branch, server);
+
+  var steps = [
+    { msg: '🚀 开始下载 ' + comp, cls: 'log-info' },
+    { msg: '📡 检查 Azure Blob 文件...', cls: 'log-info' },
+    { msg: '✅ Blob 文件存在: ' + blobPath, cls: 'log-ok' },
+    { msg: '  文件大小: ' + (comp === 'edge-ems-hmi-fe' ? '156.2' : '234.5') + ' MB', cls: 'log-info' },
+    { msg: '⬇ 下载中...', cls: 'log-info' },
+    { msg: '  ████████████░░░░ 65%', cls: 'log-info' },
+    { msg: '  ████████████████░ 92%', cls: 'log-info' },
+    { msg: '  ██████████████████ 100%', cls: 'log-ok' },
+    { msg: '✅ 下载完成 → /mnt/d/Blob/' + blobPath, cls: 'log-ok' },
+    { msg: '🎉 下载完成! 耗时 45s', cls: 'log-ok' },
+  ];
+
+  var i = 0;
+  var interval = setInterval(function() {
+    if (i >= steps.length) {
+      clearInterval(interval);
+      title.textContent = '🎉 下载完成';
+      status.textContent = 'completed';
+      addHistory(comp, branch, server, 'download', 'completed', 45);
+      // Update file status
+      var fileInfo = document.getElementById('fileInfo' + idx);
+      var statusCells = fileInfo.querySelectorAll('.value');
+      statusCells[statusCells.length - 1].innerHTML = '<span class="status-ok">✅ 已下载 (' + (comp === 'edge-ems-hmi-fe' ? '156.2' : '234.5') + ' MB)</span>';
+      return;
+    }
+    var s = steps[i];
+    logs.innerHTML += '<div class="log-line ' + s.cls + '">[' + timeStr() + '] ' + s.msg + '</div>';
+    term.scrollTop = term.scrollHeight;
+    i++;
+  }, 400);
+}
+
+// ===== Simulate deploy =====
+function simulateDeploy(comp) {
+  var idx = getTermId(comp);
+  var term = document.getElementById('term-' + idx);
+  var logs = document.getElementById('termLogs' + idx);
+  var title = document.getElementById('termTitle' + idx);
+  var status = document.getElementById('termStatus' + idx);
+
+  term.classList.add('active');
+  logs.innerHTML = '';
+  title.textContent = '部署日志';
+  status.textContent = '运行中...';
+
+  var branch = document.getElementById('branch-' + idx).value;
+  var server = currentServer[comp];
+  var isHpuy = server === 'HPUY';
+  var ext = comp === 'edge-ems-hmi-fe' ? '.zip' : '.tar.gz';
+
+  var steps = [
+    { msg: '🚀 开始部署 ' + comp + ' → ' + server, cls: 'log-info' },
+    { msg: '📦 检查本地文件...', cls: 'log-info' },
+    { msg: '✅ 本地文件就绪: ' + ext + ' (' + (comp === 'edge-ems-hmi-fe' ? '156' : '234') + ' MB)', cls: 'log-ok' },
+    { msg: '🔌 SSH 连接 ' + (isHpuy ? 'admin@192.168.1.100:9991' : 'root@10.0.0.100:9991'), cls: 'log-info' },
+    { msg: '✅ SSH 连接成功', cls: 'log-ok' },
+    { msg: '📤 上传文件到服务器...', cls: 'log-info' },
+    { msg: '  ████████████░░░░ 70%', cls: 'log-info' },
+    { msg: '  ██████████████████ 100%', cls: 'log-ok' },
+    { msg: '✅ 上传完成', cls: 'log-ok' },
+    { msg: '📂 ' + (ext === '.zip' ? 'unzip 解压' : 'tar 解压') + '...', cls: 'log-info' },
+    { msg: '✅ 解压完成', cls: 'log-ok' },
+  ];
+
+  if (comp === 'edge-ems') {
+    steps.push({ msg: '🔧 恢复 config.xml...', cls: 'log-info' });
+    steps.push({ msg: '✅ config.xml 已恢复', cls: 'log-ok' });
+  }
+
+  steps.push({ msg: '🔐 修复权限 (' + (isHpuy ? 'root:root' : 'envuser:envuser') + ')...', cls: 'log-info' });
+  steps.push({ msg: '✅ 权限修复完成', cls: 'log-ok' });
+  steps.push({ msg: '🎉 部署完成! 耗时 120s', cls: 'log-ok' });
+
+  var i = 0;
+  var interval = setInterval(function() {
+    if (i >= steps.length) {
+      clearInterval(interval);
+      title.textContent = '🎉 部署完成';
+      status.textContent = 'completed';
+      addHistory(comp, branch, server, 'deploy', 'completed', 120);
+      return;
+    }
+    var s = steps[i];
+    logs.innerHTML += '<div class="log-line ' + s.cls + '">[' + timeStr() + '] ' + s.msg + '</div>';
+    term.scrollTop = term.scrollHeight;
+    i++;
+  }, 500);
+}
+
+// ===== History =====
+function addHistory(comp, branch, server, action, status, duration) {
+  history.unshift({
+    component: comp,
+    timestamp: new Date().toISOString(),
+    branch: branch,
+    server: server,
+    action: action,
+    status: status,
+    duration: duration
+  });
+  renderHistory();
+}
+
+function renderHistory() {
+  var filtered = history.filter(function(h) { return h.component === currentTab; });
+  var body = document.getElementById('historyBody');
+  if (!filtered.length) {
+    body.innerHTML = '<tr><td colspan="6" class="empty-state">暂无部署记录</td></tr>';
+    return;
+  }
+  var html = '';
+  filtered.forEach(function(h) {
+    var ts = h.timestamp.substring(0, 16).replace('T', ' ');
+    var actionBadge = h.action === 'download'
+      ? '<span class="badge download">下载</span>'
+      : '<span class="badge deploy">部署</span>';
+    var statusBadge = h.status === 'completed'
+      ? '<span class="badge ok">成功</span>'
+      : '<span class="badge fail">失败</span>';
+    html += '<tr>';
+    html += '<td>' + ts + '</td>';
+    html += '<td>' + h.branch + '</td>';
+    html += '<td>' + h.server + '</td>';
+    html += '<td>' + actionBadge + '</td>';
+    html += '<td>' + statusBadge + '</td>';
+    html += '<td>' + h.duration + 's</td>';
+    html += '</tr>';
+  });
+  body.innerHTML = html;
+}
+
+function timeStr() {
+  var d = new Date();
+  return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+}
+
+// ===== Toast =====
+function showToast(msg, type) {
+  var existing = document.getElementById('toast-ems');
+  if (existing) existing.remove();
+  var t = document.createElement('div');
+  t.id = 'toast-ems';
+  t.style.cssText = 'position:fixed;right:24px;bottom:24px;z-index:999;background:var(--bg-elevated);border:1px solid var(--border);padding:12px 20px;border-radius:var(--radius);font-size:12px;color:var(--text);box-shadow:0 6px 24px rgba(0,0,0,.35);transform:translateX(0);transition:opacity .3s;max-width:320px;';
+  if (type === 'error') t.style.borderColor = 'rgba(248,81,73,.3)';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() {
+    t.style.opacity = '0';
+    setTimeout(function() { t.remove(); }, 300);
+  }, 2500);
+}
+
+// Init
+updatePaths();
+</script>
+</body>
+</html>
