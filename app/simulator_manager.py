@@ -306,7 +306,11 @@ def _deploy_local_thread(version, filename, task_id):
 
     os.makedirs(DEPLOY_DIR, exist_ok=True)
 
-    # -- 1. Backup config (upgrade only) --
+    # -- 1. Stop service FIRST (upgrade only) --
+    if is_upgrade:
+        _service_action('stop', task_id)
+
+    # -- 2. Backup config AFTER service stopped (upgrade only) --
     if is_upgrade:
         if os.path.exists(config_dir) and os.listdir(config_dir):
             ts = datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -323,10 +327,6 @@ def _deploy_local_thread(version, filename, task_id):
             _task_log(task_id, f'📦 配置已备份 → {backup_name}')
         else:
             _task_log(task_id, '📭 无需备份（config 为空）')
-
-    # -- 2. Stop service (upgrade only) --
-    if is_upgrade:
-        _service_action('stop', task_id)
 
     # -- 3. Clear + Extract --
     if is_upgrade:
@@ -477,7 +477,7 @@ def _deploy_remote_thread(version, filename, host, port, user, password, task_id
     def _run_remote_cmd(cmd, timeout=30):
         if not password:
             return _run_cmd(
-                f'ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p {port} {user}@{host} "{cmd}"',
+                f"ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p {port} {user}@{host} '{cmd}'",
                 task_id, timeout=timeout
             )
         fd, script_path = tempfile.mkstemp(suffix='.exp', text=True)
@@ -545,7 +545,7 @@ def _deploy_remote_thread(version, filename, host, port, user, password, task_id
         """Run SSH and return stdout as string."""
         if not password:
             r = sp.run(
-                f'ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p {port} {user}@{host} "{cmd}"',
+                f"ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p {port} {user}@{host} '{cmd}'",
                 shell=True, capture_output=True, text=True, timeout=timeout
             )
             return r.stdout, r.returncode
@@ -580,7 +580,16 @@ def _deploy_remote_thread(version, filename, host, port, user, password, task_id
     # Always ensure deploy dir exists
     _run_remote_cmd(f'mkdir -p {remote_deploy_dir} {remote_deploy_dir}/backups')
 
-    # -- 3. Backup config (upgrade only) --
+    # -- 3. Stop service FIRST (upgrade only) --
+    if is_upgrade:
+        _task_log(task_id, '⏹ 停止远程服务...')
+        _run_remote_cmd(
+            f'cd {remote_deploy_dir} && bash bin/stop.sh 2>/dev/null || '
+            f'pkill -f gridsim 2>/dev/null; sleep 1; echo "stopped"',
+            timeout=15
+        )
+
+    # -- 4. Backup config AFTER service stopped (upgrade only) --
     if is_upgrade:
         _task_log(task_id, '📦 备份远程配置...')
         ts = datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -590,15 +599,6 @@ def _deploy_remote_thread(version, filename, host, port, user, password, task_id
             f'cp -r {remote_deploy_dir}/config/* {remote_deploy_dir}/backups/config-pre-upgrade-{ts}/ && '
             f'echo "Backup done"; '
             f'else echo "No config to backup"; fi',
-            timeout=15
-        )
-
-    # -- 4. Stop service (upgrade only) --
-    if is_upgrade:
-        _task_log(task_id, '⏹ 停止远程服务...')
-        _run_remote_cmd(
-            f'cd {remote_deploy_dir} && bash bin/stop.sh 2>/dev/null || '
-            f'pkill -f gridsim 2>/dev/null; sleep 1; echo "stopped"',
             timeout=15
         )
 
