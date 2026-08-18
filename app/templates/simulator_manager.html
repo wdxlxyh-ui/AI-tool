@@ -85,7 +85,7 @@ async function rs(){
   }catch(e){}
 }
 async function cs(a){try{var r=await fetch('/api/simulator/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:a})});var d=await r.json();if(d.task_id){showToast('执行中...');setTimeout(rs,3000)}}catch(e){showToast('操作失败')}}
-async function lv(){try{var r=await fetch('/api/simulator/versions'),d=await r.json();vers=d.versions||[];var s=document.getElementById('mv');s.innerHTML=vers.length?'':'';vers.forEach(function(v){s.innerHTML+='<option value="'+v.version+'">'+v.version+' ('+v.size_fmt+')</option>'})}catch(e){}}
+async function lv(){try{var r=await fetch('/api/simulator/versions'),d=await r.json();vers=d.versions||[];var s=document.getElementById('mv');s.innerHTML=vers.length?'':'';vers.forEach(function(v){s.innerHTML+='<option value="'+v.filename+'">'+v.version+' ['+v.arch+'] ('+v.size_fmt+')</option>'})}catch(e){}}
 function od(){document.getElementById('dm').classList.add('open');lv();tt()}
 function cm(){document.getElementById('dm').classList.remove('open')}
 function tt(){var isR=document.querySelector('input[name="dt"]:checked').value==='remote';document.getElementById('rf').style.display=isR?'block':'none';document.getElementById('bmc').style.display=isR?'inline-flex':'none';document.getElementById('bsk').style.display=isR?'inline-flex':'none'}

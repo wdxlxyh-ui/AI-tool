@@ -195,6 +195,9 @@ a:hover{ text-decoration:underline; }
         <a class="nav-item {% if active_page == 'work_reports' %}active{% endif %}" href="{{ url_for('work_reports.index') }}">
           <span class="icon">📋</span><span>工作日报</span>
         </a>
+        <a class="nav-item {% if active_page == 'curtailment' %}active{% endif %}" href="{{ url_for('curtailment.index') }}">
+          <span class="icon">⚡</span><span>限电计划</span>
+        </a>
       </div>
     </nav>
     <div class="sidebar-footer">

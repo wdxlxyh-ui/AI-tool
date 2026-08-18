@@ -22,6 +22,7 @@ def create_app():
     from .sftp_manager import sftp_bp
     from .work_reports import wr_bp
     from .ems_deploy import ed_bp
+    from .curtailment import ct_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(fm_bp)
     app.register_blueprint(dashboard_bp)
@@ -29,6 +30,7 @@ def create_app():
     app.register_blueprint(sftp_bp)
     app.register_blueprint(wr_bp)
     app.register_blueprint(ed_bp)
+    app.register_blueprint(ct_bp)
 
     # Root redirect
     @app.route('/')

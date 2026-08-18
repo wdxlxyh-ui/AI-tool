@@ -1,5 +1,5 @@
 """IEC104 Simulator Manager — deploy, upgrade, remote management."""
-import os, re, json, time, glob, shutil, threading, subprocess as sp, tempfile
+import os, re, json, time, threading, subprocess as sp, tempfile
 from datetime import datetime
 from flask import (
     Blueprint, render_template, session, redirect, url_for,
@@ -11,12 +11,16 @@ sm_bp = Blueprint('simulator', __name__)
 # ============================================================
 # Config
 # ============================================================
-DIST_DIR = '/root/IEC-SIM/iec104-sim-master/dist'
+DIST_DIR = '/root/IEC-SIM/iec104-sim-master'
+INSTALLER_DIRS = [
+    '/root/IEC-SIM/iec104-sim-master/dist',
+    '/root/IEC-SIM/iec104-sim-master',
+]
 DEPLOY_DIR = '/home/envuser/IEC/gridsim'
 BACKUP_DIR = os.path.join(DEPLOY_DIR, 'backups')
 DATA_FILE = '/root/EGC/data/sim-deployments.json'
 
-PKG_PATTERN = re.compile(r'gridsim-v(.+)-linux-amd64\.tar\.gz$')
+PKG_PATTERN = re.compile(r'gridsim-install-v(.+?)(?:-linux-(?:amd64|arm64))?\.sh$')
 
 def require_auth():
     if 'user' not in session:
@@ -41,24 +45,44 @@ def parse_version(filename):
     m = PKG_PATTERN.search(filename)
     return m.group(1) if m else None
 
+def parse_arch(filename):
+    """Extract architecture (amd64/arm64) from installer filename."""
+    if '-linux-arm64.' in filename:
+        return 'arm64'
+    return 'amd64'  # default for legacy installers without arch suffix
+
 def get_available_versions():
     versions = []
-    if not os.path.isdir(DIST_DIR):
-        return versions
-    for f in sorted(os.listdir(DIST_DIR), reverse=True):
-        ver = parse_version(f)
-        if ver:
-            fpath = os.path.join(DIST_DIR, f)
-            sz = os.path.getsize(fpath)
-            mtime = datetime.fromtimestamp(os.path.getmtime(fpath))
-            versions.append({
-                'version': ver,
-                'filename': f,
-                'size': sz,
-                'size_fmt': fmt_size(sz),
-                'mtime': mtime.strftime('%Y-%m-%d %H:%M'),
-            })
+    seen = set()
+    for d in INSTALLER_DIRS:
+        if not os.path.isdir(d):
+            continue
+        for f in sorted(os.listdir(d), reverse=True):
+            if f in seen:
+                continue
+            ver = parse_version(f)
+            if ver:
+                seen.add(f)
+                fpath = os.path.join(d, f)
+                sz = os.path.getsize(fpath)
+                mtime = datetime.fromtimestamp(os.path.getmtime(fpath))
+                versions.append({
+                    'version': ver,
+                    'filename': f,
+                    'arch': parse_arch(f),
+                    'size': sz,
+                    'size_fmt': fmt_size(sz),
+                    'mtime': mtime.strftime('%Y-%m-%d %H:%M'),
+                })
     return versions
+
+def find_installer(filename):
+    """Find an installer file across all INSTALLER_DIRS. Returns full path or None."""
+    for d in INSTALLER_DIRS:
+        fp = os.path.join(d, filename)
+        if os.path.exists(fp):
+            return fp
+    return None
 
 def fmt_size(n):
     for u in ['B','KB','MB','GB']:
@@ -209,66 +233,85 @@ def _service_action(action, task_id, remote_dir=None):
       1. systemctl (requires systemd unit)
       2. Direct bin/{action}.sh script
       3. pkill (stop only) / direct binary launch (start only)
+
+    For 'stop': ALL strategies run sequentially (no short-circuit) because
+    systemd only kills processes it manages — pkill catches orphaned processes
+    from manual starts or previous deploys that systemd doesn't track.
     """
     deploy_dir = remote_dir or DEPLOY_DIR
 
+    if action == 'restart':
+        ok = _service_action('stop', task_id, remote_dir)
+        time.sleep(1)
+        ok = _service_action('start', task_id, remote_dir) and ok
+        return ok
+
     if action == 'stop':
         strategies = [
-            ('systemd', f'systemctl stop {SERVICE_NAME}'),
+            ('systemd', f'systemctl stop {SERVICE_NAME} 2>/dev/null'),
             ('script',  f'bash {deploy_dir}/bin/stop.sh 2>/dev/null'),
-            ('pkill',   f'pkill -x {SERVICE_NAME} 2>/dev/null; pkill -f "{deploy_dir}/bin/{SERVICE_NAME}" 2>/dev/null; sleep 1; echo done'),
+            ('pkill',   f'pkill -x {SERVICE_NAME} 2>/dev/null; '
+                        f'pkill -f "{deploy_dir}/bin/{SERVICE_NAME}" 2>/dev/null; '
+                        f'pkill -f "{SERVICE_NAME} serve" 2>/dev/null; '
+                        f'sleep 1; echo done'),
         ]
-    elif action == 'start':
+        # Run ALL stop strategies — systemd kills managed procs, pkill kills orphans
+        any_ok = False
+        for name, cmd in strategies:
+            ok, _, _ = _try_cmd(cmd, timeout=15)
+            if ok:
+                any_ok = True
+                if name == 'pkill':
+                    _task_log(task_id, '  ✅ 进程清理完成')
+            elif name == 'systemd':
+                _task_log(task_id, '  ⚠ systemd 不可用（将使用脚本控制）')
+        return any_ok
+
+    if action == 'start':
         strategies = [
             ('systemd', f'systemctl start {SERVICE_NAME}'),
             ('script',  f'bash {deploy_dir}/bin/start.sh 2>/dev/null'),
             ('direct',  f'mkdir -p {deploy_dir}/logs && nohup {deploy_dir}/bin/{SERVICE_NAME} serve --http :8989 --config-dir {deploy_dir}/config --log-dir {deploy_dir}/logs --log info > {deploy_dir}/logs/output.log 2>&1 &'),
         ]
-    elif action == 'restart':
-        ok = _service_action('stop', task_id, remote_dir)
-        time.sleep(1)
-        ok = _service_action('start', task_id, remote_dir) and ok
-        return ok
-    else:
-        _task_log(task_id, f'❌ 未知操作: {action}', 'error')
+        for name, cmd in strategies:
+            ok, out, err = _try_cmd(cmd, timeout=15 if name != 'direct' else 8)
+            if ok:
+                _task_log(task_id, f'  ✅ {name} {action} 成功')
+                return True
+            if name == 'systemd':
+                _task_log(task_id, f'  ⚠ systemd 不可用（将使用脚本控制）')
+            else:
+                _task_log(task_id, f'  ⚠ {name} {action} 未生效（尝试下一策略）')
+
+        _task_log(task_id, f'❌ {action} 失败：所有策略均无效', 'warning')
         return False
 
-    for name, cmd in strategies:
-        ok, out, err = _try_cmd(cmd, timeout=15 if name != 'direct' else 8)
-        if ok:
-            if action != 'stop' or name == 'systemd':
-                _task_log(task_id, f'  ✅ {name} {action} 成功')
-            return True
-        if name == 'systemd':
-            _task_log(task_id, f'  ⚠ systemd 不可用（将使用脚本控制）')
-        else:
-            _task_log(task_id, f'  ⚠ {name} {action} 未生效（尝试下一策略）')
-
-    _task_log(task_id, f'❌ {action} 失败：所有策略均无效', 'warning')
+    _task_log(task_id, f'❌ 未知操作: {action}', 'error')
     return False
 
 
 def _preflight_checks(pkg_path, task_id):
-    """Pre-deployment checks. Returns False if deployment cannot proceed."""
+    """Pre-deployment checks for installer scripts. Returns False if cannot proceed."""
     if not os.path.exists(pkg_path):
-        _task_log(task_id, f'❌ 压缩包不存在: {pkg_path}', 'error')
+        _task_log(task_id, f'❌ 安装包不存在: {pkg_path}', 'error')
         return False
 
     pkg = os.path.basename(pkg_path)
     pkg_size = os.path.getsize(pkg_path)
     _task_log(task_id, f'  📦 {pkg} ({fmt_size(pkg_size)})')
 
-    ok, out, err = _try_cmd(f'tar tzf {pkg_path} 2>/dev/null | wc -l', timeout=15)
+    # Verify it's a valid shell script
+    ok, out, _ = _try_cmd(f'file {pkg_path} | grep -qiE "shell script|bash script"', timeout=5)
     if not ok:
-        _task_log(task_id, f'❌ 压缩包损坏或无法读取', 'error')
+        _task_log(task_id, f'❌ 安装包格式错误（非 shell 脚本）', 'error')
         return False
-    _task_log(task_id, f'  📋 包内文件数: {out.strip() or "?"}')
+    _task_log(task_id, f'  ✅ 自解压安装包有效')
 
     try:
         os.makedirs(DEPLOY_DIR, exist_ok=True)
         st = os.statvfs(DEPLOY_DIR)
         free_bytes = st.f_frsize * st.f_bavail
-        needed = pkg_size * 2
+        needed = pkg_size + 50 * 1024 * 1024  # installer + 50MB extra
         free_fmt = fmt_size(free_bytes)
         if free_bytes < needed:
             _task_log(task_id, f'  ⚠ 可用空间 {free_fmt} < 建议 {fmt_size(needed)}')
@@ -291,100 +334,54 @@ def _preflight_checks(pkg_path, task_id):
 # Local deploy thread
 # ============================================================
 def _deploy_local_thread(version, filename, task_id):
-    pkg_path = os.path.join(DIST_DIR, filename)
     _task_log(task_id, f'🚀 开始部署 {version}')
 
-    config_dir = os.path.join(DEPLOY_DIR, 'config')
-    start_script = os.path.join(DEPLOY_DIR, 'bin', 'start.sh')
-    stop_script = os.path.join(DEPLOY_DIR, 'bin', 'stop.sh')
+    pkg_path = find_installer(filename)
+    if not pkg_path:
+        _task_log(task_id, f'❌ 安装包 {filename} 未找到', 'error')
+        return
 
     if not _preflight_checks(pkg_path, task_id):
         return
 
-    is_upgrade = os.path.exists(start_script) or os.path.exists(stop_script)
-    _task_log(task_id, f'{"🔄 升级模式" if is_upgrade else "🆕 全新部署"}')
+    _task_log(task_id, f'📦 执行自解压安装包...')
 
-    os.makedirs(DEPLOY_DIR, exist_ok=True)
+    # Run the installer — it handles stop, backup, extract, restore, start, verify
+    try:
+        r = sp.run(
+            ['bash', pkg_path],
+            capture_output=True, text=True, timeout=180
+        )
+        # Forward installer output to task log
+        for line in (r.stdout + '\n' + r.stderr).split('\n'):
+            line = line.strip()
+            if line:
+                _task_log(task_id, line)
 
-    # -- 1. Stop service FIRST (upgrade only) --
-    if is_upgrade:
-        _service_action('stop', task_id)
-
-    # -- 2. Backup config AFTER service stopped (upgrade only) --
-    if is_upgrade:
-        if os.path.exists(config_dir) and os.listdir(config_dir):
-            ts = datetime.now().strftime('%Y%m%d-%H%M%S')
-            backup_name = f'config-pre-upgrade-{ts}'
-            backup_path = os.path.join(BACKUP_DIR, backup_name)
-            os.makedirs(backup_path, exist_ok=True)
-            _run_cmd(f'cp -r {config_dir}/* {backup_path}/', task_id)
-            cur_ver = _detect_local_version()
-            try:
-                with open(os.path.join(backup_path, 'manifest.json'), 'w') as f:
-                    json.dump({'backup_time': ts, 'version': cur_ver}, f)
-            except Exception:
-                pass
-            _task_log(task_id, f'📦 配置已备份 → {backup_name}')
-        else:
-            _task_log(task_id, '📭 无需备份（config 为空）')
-
-    # -- 3. Clear + Extract --
-    if is_upgrade:
-        _task_log(task_id, '🗑 清理旧文件...')
-        for item in os.listdir(DEPLOY_DIR):
-            if item in ('backups',):
-                continue
-            fp = os.path.join(DEPLOY_DIR, item)
-            if os.path.isdir(fp):
-                _run_cmd(f'rm -rf {fp}', task_id)
-            else:
-                try:
-                    os.remove(fp)
-                except Exception:
-                    pass
-
-    _task_log(task_id, f'📦 解压 {filename}...')
-    r = _run_cmd(
-        f'tar xzf {pkg_path} -C {DEPLOY_DIR} --strip-components=1',
-        task_id, timeout=30
-    )
-    if not r:
+        if r.returncode != 0:
+            _task_log(task_id, f'❌ 安装包执行失败 (exit {r.returncode})', 'error')
+            return
+    except sp.TimeoutExpired:
+        _task_log(task_id, '❌ 安装包执行超时（180s）', 'error')
+        return
+    except Exception as e:
+        _task_log(task_id, f'❌ {e}', 'error')
         return
 
-    # -- 3b. Post-extraction fixups --
-    bin_dir = os.path.join(DEPLOY_DIR, 'bin')
-    if os.path.isdir(bin_dir):
-        _run_cmd(f'chmod +x {bin_dir}/* 2>/dev/null', task_id, timeout=5)
-    os.makedirs(config_dir, exist_ok=True)
-    os.makedirs(os.path.join(DEPLOY_DIR, 'logs'), exist_ok=True)
-
-    # -- 4. Restore config (upgrade only) --
-    if is_upgrade:
-        if os.path.isdir(BACKUP_DIR):
-            backups = sorted(os.listdir(BACKUP_DIR), reverse=True)
-            if backups:
-                latest = os.path.join(BACKUP_DIR, backups[0])
-                _run_cmd(f'cp -r {latest}/* {config_dir}/', task_id)
-                manifest = os.path.join(config_dir, 'manifest.json')
-                if os.path.exists(manifest):
-                    os.remove(manifest)
-                _task_log(task_id, f'📂 配置已从 {backups[0]} 恢复')
-            else:
-                _task_log(task_id, '📂 无需恢复配置')
-        else:
-            _task_log(task_id, '📂 无备份可恢复')
-
-    # -- 5. Ensure systemd service + Start --
-    _ensure_systemd_service(task_id)
-    _task_log(task_id, '▶ 启动服务...')
-    _service_action('start', task_id)
-    time.sleep(2)
-
-    # -- 6. Verify (with retries) --
+    # Verify
     _task_log(task_id, '🔍 验证部署...')
     verify_ok = True
 
-    # API health check with retry (service may need a moment)
+    # Get version from the deployed VERSION file
+    ver_file = os.path.join(DEPLOY_DIR, 'bin', 'VERSION')
+    if os.path.exists(ver_file):
+        with open(ver_file) as f:
+            deployed_ver = f.read().strip()
+        _task_log(task_id, f'  📌 部署版本: {deployed_ver}')
+    else:
+        _task_log(task_id, '  ⚠ 未找到 VERSION 文件')
+
+    # API health check with retry
     api_ok = False
     for attempt in range(5):
         ok, out, _ = _try_cmd(
@@ -398,17 +395,6 @@ def _deploy_local_thread(version, filename, task_id):
     if api_ok:
         _task_log(task_id, '  ✅ API: 200 OK')
 
-        # Instance count
-        ok2, out2, _ = _try_cmd(
-            'curl -s http://localhost:8989/api/v1/instances', timeout=5)
-        if ok2 and out2:
-            try:
-                insts = json.loads(out2)
-                _task_log(task_id, f'  ✅ 实例: {len(insts)} 个')
-            except:
-                pass
-
-        # Version from API
         ok3, out3, _ = _try_cmd(
             'curl -s http://localhost:8989/api/v1/status', timeout=5)
         if ok3 and out3:
@@ -418,51 +404,27 @@ def _deploy_local_thread(version, filename, task_id):
             except:
                 pass
 
-        # Web UI
         ok4, out4, _ = _try_cmd(
             'curl -s -o /dev/null -w "%{http_code}" http://localhost:8989/', timeout=5)
         if ok4 and out4.strip() == '200':
             _task_log(task_id, '  ✅ Web UI: 可访问')
     else:
-        _task_log(task_id, '  ⚠ API 未返回 200（可稍后手动检查）')
+        _task_log(task_id, '  ⚠ API 未返回 200（可能正在启动，稍后手动检查）')
         verify_ok = False
-
-    # PID check
-    pid_file = os.path.join(DEPLOY_DIR, 'logs', 'pid')
-    if os.path.exists(pid_file):
-        with open(pid_file) as f:
-            pid = f.read().strip()
-        _task_log(task_id, f'  🆔 PID: {pid}')
-    else:
-        # fallback: pgrep
-        ok5, out5, _ = _try_cmd(f'pgrep -x {SERVICE_NAME} 2>/dev/null || pgrep -f "{DEPLOY_DIR}/bin/{SERVICE_NAME}" 2>/dev/null', timeout=5)
-        if ok5 and out5:
-            _task_log(task_id, f'  🆔 PID: {out5.split()[0]}')
 
     if verify_ok:
         _task_log(task_id, f'🎉 部署完成! 版本: {version}', 'completed')
     else:
         _task_log(task_id, f'⚠ 部署完成，但部分验证未通过', 'warning')
 
-def _detect_local_version():
-    """Detect current version from deployed files or process."""
-    # Try process command line
-    r = sp.run('ps -eo cmd | grep "gridsim" | grep -v grep',
-               shell=True, capture_output=True, text=True, timeout=3)
-    for line in r.stdout.strip().split('\n'):
-        line = line.strip()
-        # Check for version in start.sh call or process args
-        break
-    # Try to read version from deployment
-    for f in sorted(glob.glob(os.path.join(DEPLOY_DIR, 'bin', '*')), reverse=True):
-        pass
-    return 'unknown'
-
 # ============================================================
 # Remote deploy thread
 # ============================================================
 def _deploy_remote_thread(version, filename, host, port, user, password, task_id):
-    pkg_local = os.path.join(DIST_DIR, filename)
+    pkg_local = find_installer(filename)
+    if not pkg_local:
+        _task_log(task_id, f'❌ 安装包 {filename} 未找到', 'error')
+        return
     pkg_remote = f'/tmp/{filename}'
     remote_deploy_dir = DEPLOY_DIR  # same path on remote
 
@@ -562,6 +524,10 @@ def _deploy_remote_thread(version, filename, host, port, user, password, task_id
         finally:
             os.unlink(script_path)
 
+    # The self-extracting installer handles everything:
+    # stop, backup, clean, extract, restore config, systemd, start, verify
+    # We just need to: ping → SCP → run script → verify
+
     # -- 1. Pre-check: ping --
     _task_log(task_id, '🌐 检查远程服务器可达性...')
     r = sp.run(f'ping -c1 -W3 {host}', shell=True, capture_output=True, text=True, timeout=10)
@@ -569,87 +535,20 @@ def _deploy_remote_thread(version, filename, host, port, user, password, task_id
         _task_log(task_id, '❌ 远程服务器不可达', 'error')
         return
 
-    # -- 2. Detect fresh deploy or upgrade --
-    _task_log(task_id, '🔍 检测远程安装状态...')
-    stdout, _ = _remote_ssh_output(
-        f'test -f {remote_deploy_dir}/bin/start.sh && echo upgrade || echo fresh'
-    )
-    is_upgrade = 'upgrade' in stdout
-    _task_log(task_id, f'{"🔄 升级模式" if is_upgrade else "🆕 全新部署模式"}')
-
-    # Always ensure deploy dir exists
-    _run_remote_cmd(f'mkdir -p {remote_deploy_dir} {remote_deploy_dir}/backups')
-
-    # -- 3. Stop service FIRST (upgrade only) --
-    if is_upgrade:
-        _task_log(task_id, '⏹ 停止远程服务...')
-        _run_remote_cmd(
-            f'cd {remote_deploy_dir} && bash bin/stop.sh 2>/dev/null || '
-            f'pkill -f gridsim 2>/dev/null; sleep 1; echo "stopped"',
-            timeout=15
-        )
-
-    # -- 4. Backup config AFTER service stopped (upgrade only) --
-    if is_upgrade:
-        _task_log(task_id, '📦 备份远程配置...')
-        ts = datetime.now().strftime('%Y%m%d-%H%M%S')
-        _run_remote_cmd(
-            f'if [ -d {remote_deploy_dir}/config ] && ls {remote_deploy_dir}/config/* >/dev/null 2>&1; then '
-            f'mkdir -p {remote_deploy_dir}/backups/config-pre-upgrade-{ts} && '
-            f'cp -r {remote_deploy_dir}/config/* {remote_deploy_dir}/backups/config-pre-upgrade-{ts}/ && '
-            f'echo "Backup done"; '
-            f'else echo "No config to backup"; fi',
-            timeout=15
-        )
-
-    # -- 5. SCP transfer --
-    _task_log(task_id, f'📤 传输 {filename} ({fmt_size(os.path.getsize(pkg_local))})...')
+    # -- 2. SCP transfer --
+    pkg_size = os.path.getsize(pkg_local)
+    _task_log(task_id, f'📤 传输安装包 {filename} ({fmt_size(pkg_size)})...')
     ok = _run_remote_scp(pkg_local, pkg_remote, timeout=120)
     if not ok:
         _task_log(task_id, '❌ SCP 传输失败', 'error')
         return
     _task_log(task_id, '  ✔ 传输完成')
 
-    # -- 6. Clean + Extract --
-    if is_upgrade:
-        _task_log(task_id, '🗑 清理远程旧文件...')
-        _run_remote_cmd(
-            f'for item in {remote_deploy_dir}/bin {remote_deploy_dir}/logs '
-            f'{remote_deploy_dir}/manuals {remote_deploy_dir}/resources '
-            f'{remote_deploy_dir}/web; do '
-            f'[ -d "$item" ] && rm -rf "$item"; done; '
-            f'rm -f {remote_deploy_dir}/*.md {remote_deploy_dir}/*.sh 2>/dev/null; '
-            f'echo "Cleaned"',
-            timeout=15
-        )
+    # -- 3. Run installer on remote --
+    _task_log(task_id, f'📦 远程执行自解压安装包...')
+    _run_remote_cmd(f'chmod +x {pkg_remote} && bash {pkg_remote}', timeout=180)
 
-    _task_log(task_id, '📦 远程解压...')
-    _run_remote_cmd(
-        f'tar xzf {pkg_remote} -C {remote_deploy_dir} --strip-components=1 && '
-        f'rm -f {pkg_remote} && echo "Extracted {version}"',
-        timeout=30
-    )
-
-    # -- 7. Restore config (upgrade only) --
-    if is_upgrade:
-        _task_log(task_id, '📂 恢复远程配置...')
-        _run_remote_cmd(
-            f'backups=($(ls -d {remote_deploy_dir}/backups/config-pre-upgrade-* 2>/dev/null)); '
-            f'if [ ${{#backups[@]}} -gt 0 ]; then '
-            f'latest=${{backups[-1]}}; '
-            f'cp -r "$latest"/* {remote_deploy_dir}/config/ 2>/dev/null; '
-            f'rm -f {remote_deploy_dir}/config/manifest.json 2>/dev/null; '
-            f'echo "Config restored from $latest"; '
-            f'else echo "No backup to restore"; fi',
-            timeout=15
-        )
-
-    # -- 8. Start service --
-    _task_log(task_id, '▶ 启动远程服务...')
-    _run_remote_cmd(f'cd {remote_deploy_dir} && bash bin/start.sh', timeout=15)
-    time.sleep(2)
-
-    # -- 9. Verify --
+    # -- 4. Verify --
     _task_log(task_id, '🔍 验证远程部署...')
     stdout, _ = _remote_ssh_output(
         'curl -s -o /dev/null -w "%{http_code}" http://localhost:8989/api/v1/status'
@@ -816,9 +715,11 @@ def api_deploy():
         return jsonify({'error': 'unauthorized'}), 401
     data = request.get_json()
     version = data.get('version', '')
-    # Find matching file
+    # Try matching by filename first (arch-specific), then by version
     versions = get_available_versions()
-    match = next((v for v in versions if v['version'] == version), None)
+    match = next((v for v in versions if v['filename'] == version), None)
+    if not match:
+        match = next((v for v in versions if v['version'] == version), None)
     if not match:
         return jsonify({'error': f'版本 {version} 未找到'}), 404
 
@@ -845,7 +746,9 @@ def api_remote_deploy():
         return jsonify({'error': 'IP 和密码不能为空'}), 400
 
     versions = get_available_versions()
-    match = next((v for v in versions if v['version'] == version), None)
+    match = next((v for v in versions if v['filename'] == version), None)
+    if not match:
+        match = next((v for v in versions if v['version'] == version), None)
     if not match:
         return jsonify({'error': f'版本 {version} 未找到'}), 404
 

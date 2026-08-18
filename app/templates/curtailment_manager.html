@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% set active_page = 'curtailment' %}
+{% block title %}限电计划管理{% endblock %}
+{% block page_title %}限电计划管理{% endblock %}
+{% block page_subtitle %}文件生成 · 定时任务 · 文件管理{% endblock %}
+
+{% block head_extra %}
+<style>
+.ctrl-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.d1{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+.d1.on{ background:var(--success); }
+.d1.off{ background:var(--danger); }
+@media(max-width:900px){ .stat-grid{ grid-template-columns:repeat(2,1fr); } }
+@media(max-width:640px){ .stat-grid{ grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="section-title">运行状态</div>
+<div class="stat-grid">
+  <div class="stat-card"><div class="label">运行状态</div><div class="value"><span id="rd" class="d1 off"></span><span id="rt">检测中...</span></div><div class="sub" id="rs"></div></div>
+  <div class="stat-card"><div class="label">文件数量</div><div class="value" id="ft">—</div><div class="sub">CSV 格式</div></div>
+  <div class="stat-card"><div class="label">最新文件</div><div class="value" id="lt" style="font-size:14px;">—</div><div class="sub" id="ls"></div></div>
+  <div class="stat-card"><div class="label">目标目录</div><div class="value" id="dt" style="font-size:14px;">—</div></div>
+</div>
+
+<div class="ctrl-row">
+  <button class="btn btn-primary btn-sm" onclick="cs('start')">启动</button>
+  <button class="btn btn-danger btn-sm" onclick="cs('stop')">停止</button>
+  <button class="btn btn-outline btn-sm" onclick="rs();rf()">刷新</button>
+</div>
+
+<div class="section-title">手动生成</div>
+<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;">
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+    <div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">计划开始时间</div>
+      <input type="datetime-local" id="pt" style="padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:13px;outline:none;">
+    </div>
+    <div style="display:flex;align-items:flex-end;">
+      <button class="btn btn-outline btn-sm" onclick="nt()" style="margin-bottom:0;">现在</button>
+    </div>
+  </div>
+  <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">计划值 (0-100)：6个时间段的功率限制值</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+    <input type="number" id="pv0" min="0" max="100" value="50" style="width:70px;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:13px;text-align:center;outline:none;">
+    <input type="number" id="pv1" min="0" max="100" value="50" style="width:70px;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:13px;text-align:center;outline:none;">
+    <input type="number" id="pv2" min="0" max="100" value="50" style="width:70px;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:13px;text-align:center;outline:none;">
+    <input type="number" id="pv3" min="0" max="100" value="50" style="width:70px;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:13px;text-align:center;outline:none;">
+    <input type="number" id="pv4" min="0" max="100" value="50" style="width:70px;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:13px;text-align:center;outline:none;">
+    <input type="number" id="pv5" min="0" max="100" value="50" style="width:70px;padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:13px;text-align:center;outline:none;">
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button class="btn btn-outline btn-sm" onclick="rv()">随机</button>
+    <button class="btn btn-primary btn-sm" onclick="gv()">生成一次</button>
+  </div>
+</div>
+
+<div class="section-title">文件列表</div>
+<table class="data-table"><thead><tr><th>文件名</th><th>大小</th><th>创建时间</th><th>操作</th></tr></thead>
+<tbody id="fb"><tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px;">暂无文件</td></tr></tbody></table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function esc(s){if(!s)return'';var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function escQ(s){return s.replace(/'/g,"\\'")}
+
+async function rs(){
+  try{var r=await fetch('/api/curtailment/status'),s=await r.json(),d=document.getElementById('rd'),t=document.getElementById('rt'),u=document.getElementById('rs');
+  if(s.running){d.className='d1 on';t.textContent='运行中';u.textContent='已启动'}else{d.className='d1 off';t.textContent='已停止';u.textContent='未运行'}
+  document.getElementById('ft').textContent=s.file_count||'0';
+  var lf=s.last_file;
+  document.getElementById('lt').textContent=lf?lf.name:'—';
+  document.getElementById('ls').textContent=lf?'大小: '+lf.size+'B | '+lf.mtime:'';
+  document.getElementById('dt').textContent=s.folder||'—';
+  }catch(e){}
+}
+async function cs(a){try{var r=await fetch('/api/curtailment/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:a})});var d=await r.json();if(d.ok){showToast('操作成功');setTimeout(rs,1000)}else{showToast(d.error||'操作失败')}}catch(e){showToast('操作失败')}}
+async function rf(){var b=document.getElementById('fb');try{var r=await fetch('/api/curtailment/files'),d=await r.json(),fs=d.files||[];if(!fs.length){b.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px;">暂无文件</td></tr>';return}var h='';fs.forEach(function(f){h+='<tr><td>'+esc(f.name)+'</td><td>'+f.size+'B</td><td>'+esc(f.mtime)+'</td><td><button class="btn btn-danger btn-xs" onclick="df(\''+escQ(f.name)+'\')">删除</button></td></tr>'});b.innerHTML=h}catch(e){}}
+async function df(n){if(!confirm('确定删除 '+n+'？'))return;try{var r=await fetch('/api/curtailment/files',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:n})}),d=await r.json();if(d.ok){showToast('已删除');rf();rs()}else showToast(d.error||'删除失败')}catch(e){}}
+
+function rv(){
+  for(var i=0;i<6;i++){
+    document.getElementById('pv'+i).value=Math.floor(Math.random()*101);
+  }
+}
+
+function nt(){
+  var now=new Date();
+  var y=now.getFullYear();
+  var m=String(now.getMonth()+1).padStart(2,'0');
+  var d=String(now.getDate()).padStart(2,'0');
+  var h=String(now.getHours()).padStart(2,'0');
+  var min=String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('pt').value=y+'-'+m+'-'+d+'T'+h+':'+min;
+}
+
+async function gv(){
+  var vals=[];
+  for(var i=0;i<6;i++){
+    var v=parseInt(document.getElementById('pv'+i).value);
+    if(isNaN(v)||v<0||v>100){showToast('计划值必须在0-100之间');return}
+    vals.push(v);
+  }
+  var pt=document.getElementById('pt').value;
+  var body={values:vals};
+  if(pt) body.plan_time=pt;
+  try{
+    var r=await fetch('/api/curtailment/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var d=await r.json();
+    if(d.ok){showToast('已生成: '+d.file);rf();rs()}else showToast(d.error||'生成失败')
+  }catch(e){showToast('生成失败')}
+}
+
+document.addEventListener('DOMContentLoaded',function(){rs();rf();setInterval(rs,10000);setInterval(rf,30000)});
+</script>
+{% endblock %}

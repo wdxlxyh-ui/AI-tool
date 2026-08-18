@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1920">
+<title>AIDC AI电力系统智能运营平台</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; }
+body {
+  font-family: 'Noto Sans SC', sans-serif;
+  background: #0a0e1a;
+  color: #e0e8ff;
+  position: relative;
+}
+/* Background grid */
+body::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none; z-index: 0;
+}
+body::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(0,102,255,0.12) 0%, transparent 60%),
+              radial-gradient(ellipse at 20% 80%, rgba(0,212,255,0.06) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 90%, rgba(0,102,255,0.06) 0%, transparent 50%);
+  pointer-events: none; z-index: 0;
+}
+
+/* ===== TYPOGRAPHY ===== */
+h1,h2,h3,h4,h5,h6,.title-font { font-family: 'Rajdhani', 'Noto Sans SC', sans-serif; }
+
+/* ===== LAYOUT ===== */
+.dashboard {
+  position: relative; z-index: 1;
+  width: 1920px; height: 1080px;
+  display: grid;
+  grid-template-columns: 384px 960px 576px;
+  grid-template-rows: 56px 1fr;
+  gap: 0;
+}
+.header {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px;
+  background: linear-gradient(180deg, rgba(10,20,40,0.95) 0%, rgba(10,14,26,0.8) 100%);
+  border-bottom: 1px solid rgba(0,212,255,0.15);
+  position: relative;
+}
+.header::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,212,255,0.4), rgba(0,102,255,0.4), transparent);
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.header-logo {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, #00d4ff, #0066ff);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Rajdhani'; font-weight: 700; font-size: 14px; color: #fff;
+  box-shadow: 0 0 12px rgba(0,212,255,0.3);
+}
+.header-title {
+  font-family: 'Rajdhani', 'Noto Sans SC';
+  font-size: 20px; font-weight: 600;
+  background: linear-gradient(90deg, #e0e8ff, #00d4ff);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  letter-spacing: 2px;
+}
+.header-right { display: flex; align-items: center; gap: 24px; font-size: 13px; color: #7a8bb5; }
+.header-status { display: flex; align-items: center; gap: 6px; }
+.header-status .dot { width: 6px; height: 6px; border-radius: 50%; background: #00ff88; animation: blink 2s infinite; }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.header-time { font-family: 'Rajdhani'; font-size: 15px; color: #00d4ff; letter-spacing: 1px; }
+
+/* ===== GLASS CARD ===== */
+.glass {
+  background: rgba(10, 20, 40, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 212, 255, 0.1);
+  border-radius: 8px;
+}
+.glass-glow {
+  background: rgba(10, 20, 40, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: 8px;
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.08), inset 0 1px 0 rgba(0, 212, 255, 0.1);
+}
+
+/* ===== COLUMNS ===== */
+.left-col, .right-col {
+  padding: 12px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,212,255,0.2) transparent;
+}
+.left-col::-webkit-scrollbar, .right-col::-webkit-scrollbar { width: 4px; }
+.left-col::-webkit-scrollbar-thumb, .right-col::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.2); border-radius: 2px; }
+.center-col { position: relative; overflow: hidden; }
+#twinContainer canvas { display: block; width: 100% !important; height: 100% !important; }
+
+/* ===== SECTION TITLE ===== */
+.section-title {
+  font-family: 'Rajdhani', 'Noto Sans SC';
+  font-size: 15px; font-weight: 600;
+  color: #00d4ff;
+  padding: 6px 0 10px;
+  letter-spacing: 1px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title::before {
+  content: ''; width: 3px; height: 14px; border-radius: 2px;
+  background: linear-gradient(180deg, #00d4ff, #0066ff);
+}
+
+/* ===== LEFT: AGENT CARDS ===== */
+.agent-cards { display: flex; flex-direction: column; gap: 8px; }
+.agent-card {
+  padding: 10px 12px;
+  transition: border-color 0.3s;
+}
+.agent-card:hover { border-color: rgba(0,212,255,0.35); }
+.agent-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.agent-name {
+  font-size: 13px; font-weight: 500; color: #e0e8ff;
+  display: flex; align-items: center; gap: 6px;
+}
+.agent-name .icon-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.status-badge {
+  font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 500;
+}
+.status-running { background: rgba(0,255,136,0.15); color: #00ff88; border: 1px solid rgba(0,255,136,0.3); }
+.status-warning { background: rgba(255,170,0,0.15); color: #ffaa00; border: 1px solid rgba(255,170,0,0.3); }
+.status-completed { background: rgba(0,212,255,0.15); color: #00d4ff; border: 1px solid rgba(0,212,255,0.3); }
+.agent-chart { width: 100%; height: 70px; }
+.agent-metrics {
+  display: flex; flex-wrap: wrap; gap: 6px 12px;
+  font-size: 11px; color: #7a8bb5;
+  margin-bottom: 4px;
+}
+.agent-metrics span { white-space: nowrap; }
+.agent-metrics .val { color: #00d4ff; font-family: 'Rajdhani'; font-weight: 600; }
+.agent-conclusion {
+  font-size: 11px; color: #5a6b8a;
+  border-top: 1px solid rgba(0,212,255,0.08);
+  padding-top: 4px; margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* ===== CENTER: DIGITAL TWIN ===== */
+.twin-container {
+  width: 100%; height: 100%;
+  position: relative;
+}
+/* Flowing energy lines (SVG overlay) */
+.energy-flows {
+  position: absolute; inset: 0;
+  pointer-events: none; z-index: 10;
+}
+.flow-line {
+  fill: none; stroke-width: 2; stroke-linecap: round;
+  filter: drop-shadow(0 0 4px rgba(0,212,255,0.5));
+}
+.flow-particle {
+  fill: none; stroke-width: 3; stroke-linecap: round;
+  stroke-dasharray: 8 60;
+  animation: flowMove 2.5s linear infinite;
+}
+@keyframes flowMove {
+  0% { stroke-dashoffset: 68; }
+  100% { stroke-dashoffset: -68; }
+}
+.flow-particle.slow { animation-duration: 3.5s; }
+.flow-particle.fast { animation-duration: 1.8s; }
+.flow-particle.reverse { animation-direction: reverse; }
+
+/* Twin nodes */
+.twin-node {
+  position: absolute;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  z-index: 5;
+}
+.twin-node-icon {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: rgba(0,20,50,0.8);
+  border: 1.5px solid rgba(0,212,255,0.3);
+  box-shadow: 0 0 12px rgba(0,212,255,0.15);
+  transition: box-shadow 0.3s;
+  position: relative;
+}
+.twin-node-icon::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 50%;
+  border: 1px solid rgba(0,212,255,0.08);
+}
+.twin-node-icon:hover {
+  box-shadow: 0 0 20px rgba(0,212,255,0.3);
+}
+.twin-node-icon svg { width: 24px; height: 24px; }
+.twin-node-label {
+  font-size: 10px; color: #7a8bb5; text-align: center;
+  white-space: nowrap; line-height: 1.2;
+}
+.twin-node-label strong {
+  display: block; font-size: 11px; color: #e0e8ff; font-weight: 500;
+}
+.twin-node-icon.large { width: 52px; height: 52px; }
+.twin-node-icon.large svg { width: 28px; height: 28px; }
+
+/* Metric tags */
+.twin-metric {
+  position: absolute;
+  font-size: 10px; color: #7a8bb5;
+  white-space: nowrap;
+}
+.twin-metric .mv { color: #00d4ff; font-family: 'Rajdhani'; font-weight: 600; font-size: 11px; }
+.twin-metric .mu { color: #5a6b8a; font-size: 9px; }
+
+/* Data center buildings */
+.dc-grid {
+  position: absolute;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.dc-building {
+  width: 72px; height: 46px;
+  background: rgba(0,20,50,0.7);
+  border: 1px solid rgba(0,212,255,0.15);
+  border-radius: 4px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  font-size: 9px; color: #7a8bb5;
+  position: relative;
+  transition: border-color 0.3s;
+}
+.dc-building:hover { border-color: rgba(0,212,255,0.4); }
+.dc-building .bname { color: #e0e8ff; font-size: 10px; font-weight: 500; }
+.dc-building .bload { font-family: 'Rajdhani'; color: #00d4ff; font-size: 11px; }
+.dc-building::before {
+  content: ''; position: absolute; top: 2px; left: 50%; transform: translateX(-50%);
+  width: 60%; height: 2px; border-radius: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,212,255,0.3), transparent);
+}
+
+/* Park center hub */
+.park-hub {
+  position: absolute;
+  width: 100px; height: 100px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,212,255,0.1) 0%, rgba(0,20,50,0.4) 70%);
+  border: 1.5px solid rgba(0,212,255,0.25);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column;
+  box-shadow: 0 0 30px rgba(0,212,255,0.1);
+  z-index: 6;
+}
+.park-hub::after {
+  content: ''; position: absolute; inset: -8px; border-radius: 50%;
+  border: 1px dashed rgba(0,212,255,0.12);
+  animation: hubSpin 20s linear infinite;
+}
+@keyframes hubSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+.park-hub-label {
+  font-size: 12px; font-weight: 500; color: #00d4ff;
+  text-align: center; line-height: 1.3;
+}
+.park-hub-sub {
+  font-size: 10px; color: #7a8bb5;
+  font-family: 'Rajdhani';
+}
+
+/* Cooling tanks */
+.tank-group {
+  position: absolute; display: flex; gap: 6px; align-items: flex-end;
+}
+.tank {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 40%, rgba(0,102,255,0.3), rgba(0,20,50,0.8));
+  border: 1.5px solid rgba(0,102,255,0.3);
+  position: relative;
+}
+.tank::after {
+  content: ''; position: absolute; bottom: 0; left: 10%; right: 10%; height: 60%;
+  background: linear-gradient(180deg, transparent, rgba(0,102,255,0.2));
+  border-radius: 0 0 50% 50%;
+}
+
+/* Breathing animation for active elements */
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 10px rgba(0,212,255,0.15); }
+  50% { box-shadow: 0 0 25px rgba(0,212,255,0.3); }
+}
+.breathing { animation: breathe 3s ease-in-out infinite; }
+
+/* ===== RIGHT COLUMN ===== */
+.right-col { display: flex; flex-direction: column; gap: 10px; }
+
+/* Pipeline tracker */
+.pipeline { padding: 12px; }
+.pipeline-nodes {
+  display: flex; align-items: center; justify-content: space-between;
+  position: relative;
+}
+.pipeline-nodes::before {
+  content: ''; position: absolute; top: 14px; left: 30px; right: 30px; height: 2px;
+  background: rgba(0,212,255,0.15);
+}
+.p-node {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  position: relative; z-index: 2;
+}
+.p-node-circle {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+  font-family: 'Rajdhani';
+  transition: all 0.3s;
+}
+.p-node.done .p-node-circle {
+  background: rgba(0,255,136,0.15);
+  border: 1.5px solid #00ff88;
+  color: #00ff88;
+}
+.p-node.active .p-node-circle {
+  background: rgba(0,212,255,0.2);
+  border: 1.5px solid #00d4ff;
+  color: #00d4ff;
+  animation: nodeBreathe 2s ease-in-out infinite;
+}
+.p-node.pending .p-node-circle {
+  background: rgba(90,107,138,0.15);
+  border: 1.5px solid rgba(90,107,138,0.4);
+  color: #5a6b8a;
+}
+@keyframes nodeBreathe {
+  0%,100% { box-shadow: 0 0 8px rgba(0,212,255,0.2); }
+  50% { box-shadow: 0 0 20px rgba(0,212,255,0.5); }
+}
+.p-node-label { font-size: 10px; color: #7a8bb5; white-space: nowrap; }
+.p-node-state { font-size: 9px; }
+.p-node.done .p-node-state { color: #00ff88; }
+.p-node.active .p-node-state { color: #00d4ff; }
+.p-node.pending .p-node-state { color: #5a6b8a; }
+
+/* Pipeline connector dots between nodes */
+.p-connector {
+  position: absolute; top: 11px;
+  width: 12px; height: 8px; z-index: 1;
+}
+.p-connector::before {
+  content: ''; display: block; width: 100%; height: 2px; margin-top: 3px;
+  background: repeating-linear-gradient(90deg, rgba(0,212,255,0.3) 0, rgba(0,212,255,0.3) 2px, transparent 2px, transparent 4px);
+}
+
+/* Workflow timeline */
+.workflow { padding: 12px; flex: 1; min-height: 0; }
+.wf-title { font-size: 13px; font-weight: 500; color: #00d4ff; margin-bottom: 8px; }
+.wf-list { display: flex; flex-direction: column; gap: 0; position: relative; }
+.wf-item {
+  display: grid; grid-template-columns: 8px 100px auto 1fr auto;
+  gap: 8px; align-items: center;
+  padding: 6px 0;
+  font-size: 11px;
+  position: relative;
+}
+.wf-dot-col { display: flex; flex-direction: column; align-items: center; height: 100%; }
+.wf-dot {
+  width: 8px; height: 8px; border-radius: 50%; margin-top: 4px;
+  flex-shrink: 0;
+}
+.wf-dot.done { background: #00ff88; box-shadow: 0 0 6px rgba(0,255,136,0.4); }
+.wf-dot.active { background: #00d4ff; box-shadow: 0 0 8px rgba(0,212,255,0.5); animation: dotPulse 1.5s infinite; }
+.wf-dot.pending { background: #5a6b8a; }
+@keyframes dotPulse {
+  0%,100% { transform: scale(1); } 50% { transform: scale(1.4); }
+}
+.wf-line {
+  width: 1px; flex: 1;
+  background: rgba(0,212,255,0.12);
+  margin: 2px 0;
+}
+.wf-name { color: #e0e8ff; font-weight: 400; }
+.wf-status { font-size: 10px; padding: 1px 6px; border-radius: 8px; white-space: nowrap; }
+.wf-status.done { color: #00ff88; background: rgba(0,255,136,0.1); }
+.wf-status.active { color: #00d4ff; background: rgba(0,212,255,0.1); }
+.wf-status.pending { color: #5a6b8a; background: rgba(90,107,138,0.1); }
+.wf-desc { color: #7a8bb5; font-size: 10px; }
+.wf-time { font-family: 'Rajdhani'; color: #5a6b8a; font-size: 10px; text-align: right; }
+
+/* Event messages between nodes */
+.wf-event {
+  padding: 2px 0 2px 20px;
+  font-size: 9px; color: #5a6b8a;
+  display: flex; align-items: center; gap: 4px;
+}
+.wf-event::before {
+  content: '→'; color: rgba(0,212,255,0.3); font-size: 10px;
+}
+
+/* Strategy table */
+.strategy-table { padding: 10px 12px; }
+.st-title { font-size: 13px; font-weight: 500; color: #00d4ff; margin-bottom: 8px; }
+.st-table {
+  width: 100%; border-collapse: collapse; font-size: 11px;
+}
+.st-table th {
+  text-align: left; padding: 5px 6px;
+  color: #7a8bb5; font-weight: 400; font-size: 10px;
+  border-bottom: 1px solid rgba(0,212,255,0.1);
+}
+.st-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(0,212,255,0.05);
+  color: #b0bce0;
+}
+.st-table tr:hover td { background: rgba(0,212,255,0.03); }
+.st-status {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; padding: 1px 6px; border-radius: 8px;
+}
+.st-status.success { color: #00ff88; background: rgba(0,255,136,0.1); }
+.st-status.running { color: #00d4ff; background: rgba(0,212,255,0.1); }
+.st-status.pending { color: #5a6b8a; background: rgba(90,107,138,0.1); }
+
+/* Benefits metrics */
+.benefits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0 0 4px; }
+.benefit-card {
+  padding: 10px 8px;
+  text-align: center;
+}
+.benefit-val {
+  font-family: 'Rajdhani';
+  font-size: 22px; font-weight: 700;
+  background: linear-gradient(135deg, #00d4ff, #00ff88);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  line-height: 1.2;
+}
+.benefit-label {
+  font-size: 10px; color: #7a8bb5; margin-top: 2px;
+}
+.benefit-change {
+  font-size: 9px; margin-top: 2px;
+}
+.benefit-change.up { color: #00ff88; }
+.benefit-change.down { color: #ff4444; }
+
+/* ===== SCROLLBAR CUSTOM ===== */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.2); border-radius: 2px; }
+
+/* ===== CENTER AREA HEADER ===== */
+.center-header {
+  position: absolute; top: 8px; left: 12px; right: 12px;
+  display: flex; align-items: center; justify-content: space-between;
+  z-index: 20;
+}
+.center-title {
+  font-family: 'Rajdhani', 'Noto Sans SC';
+  font-size: 14px; font-weight: 600; color: rgba(0,212,255,0.7);
+  letter-spacing: 2px;
+}
+.center-subtitle {
+  font-size: 10px; color: #5a6b8a;
+}
+
+/* Center bottom status bar */
+.center-statusbar {
+  position: absolute; bottom: 8px; left: 12px; right: 12px;
+  display: flex; gap: 16px; align-items: center;
+  font-size: 10px; color: #5a6b8a; z-index: 20;
+}
+.center-statusbar .stat {
+  display: flex; align-items: center; gap: 4px;
+}
+.center-statusbar .stat .sv {
+  color: #00d4ff; font-family: 'Rajdhani'; font-weight: 600;
+}
+
+/* ===== DATA FLOW SVG PATHS ===== */
+.dash-anim {
+  stroke-dasharray: 6 4;
+  animation: dashFlow 1.5s linear infinite;
+}
+@keyframes dashFlow {
+  to { stroke-dashoffset: -10; }
+}
+.dash-anim-slow {
+  stroke-dasharray: 8 6;
+  animation: dashFlowSlow 2.5s linear infinite;
+}
+@keyframes dashFlowSlow {
+  to { stroke-dashoffset: -14; }
+}
+
+/* Glow pulse on center hub */
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+</style>
+</head>
+<body>
+
+<div class="dashboard">
+  <!-- ===== HEADER ===== -->
+  <header class="header">
+    <div class="header-left">
+      <div class="header-logo">AI</div>
+      <div class="header-title">AIDC AI电力系统智能运营平台</div>
+    </div>
+    <div class="header-right">
+      <div class="header-status"><span class="dot"></span> 系统运行正常</div>
+      <div>智能体在线: <span style="color:#00ff88;font-family:'Rajdhani';font-weight:600;">5/5</span></div>
+      <div>数据延迟: <span style="color:#00d4ff;font-family:'Rajdhani';font-weight:600;">12ms</span></div>
+      <div class="header-time" id="headerTime">--</div>
+    </div>
+  </header>
+
+  <!-- ===== LEFT COLUMN ===== -->
+  <div class="left-col">
+    <div class="section-title">智能体监视中心</div>
+    <div class="agent-cards">
+
+      <!-- Card 1: 监盘智能体 -->
+      <div class="agent-card glass-glow">
+        <div class="agent-card-header">
+          <div class="agent-name">
+            <span class="icon-dot" style="background:#00ff88;"></span>
+            监盘智能体
+          </div>
+          <span class="status-badge status-running">运行中</span>
+        </div>
+        <div class="agent-metrics">
+          <span>风机 <span class="val">98.2%</span></span>
+          <span>储能 <span class="val">SOC 76%</span></span>
+          <span>负荷 <span class="val">42.8MW</span></span>
+          <span>PUE <span class="val">1.18</span></span>
+        </div>
+        <div id="chart1" class="agent-chart"></div>
+        <div class="agent-conclusion">实时监控中，风电出力偏差 +2.3%，储能SOC在正常区间，PUE指标优于基线目标。</div>
+      </div>
+
+      <!-- Card 2: 预警智能体 -->
+      <div class="agent-card glass-glow">
+        <div class="agent-card-header">
+          <div class="agent-name">
+            <span class="icon-dot" style="background:#ffaa00;"></span>
+            预警智能体
+          </div>
+          <span class="status-badge status-warning">预警中</span>
+        </div>
+        <div class="agent-metrics">
+          <span>设备健康 <span class="val" style="color:#ffaa00;">92.1%</span></span>
+          <span>风险等级 <span class="val" style="color:#ffaa00;">中</span></span>
+          <span>剩余寿命 <span class="val">8.2年</span></span>
+        </div>
+        <div id="chart2" class="agent-chart"></div>
+        <div class="agent-conclusion">识别到B3区变压器温度趋势异常，建议48小时内安排检修，风险等级从低升至中。</div>
+      </div>
+
+      <!-- Card 3: 预测智能体 -->
+      <div class="agent-card glass-glow">
+        <div class="agent-card-header">
+          <div class="agent-name">
+            <span class="icon-dot" style="background:#00d4ff;"></span>
+            预测智能体
+          </div>
+          <span class="status-badge status-running">运行中</span>
+        </div>
+        <div class="agent-metrics">
+          <span>负荷预测 <span class="val">45.6MW</span></span>
+          <span>新能源 <span class="val">28.3MW</span></span>
+          <span>供需差 <span class="val" style="color:#ff4444;">-3.2MW</span></span>
+        </div>
+        <div id="chart3" class="agent-chart"></div>
+        <div class="agent-conclusion">预计14:30-15:00出现供需缺口约3.2MW，建议调度储能放电或启动需求响应。</div>
+      </div>
+
+      <!-- Card 4: 调度智能体 -->
+      <div class="agent-card glass-glow">
+        <div class="agent-card-header">
+          <div class="agent-name">
+            <span class="icon-dot" style="background:#00d4ff;"></span>
+            调度智能体
+          </div>
+          <span class="status-badge status-completed">已执行</span>
+        </div>
+        <div class="agent-metrics">
+          <span>调度策略 <span class="val">储能放电</span></span>
+          <span>执行状态 <span class="val" style="color:#00ff88;">完成</span></span>
+          <span>执行率 <span class="val">100%</span></span>
+        </div>
+        <div id="chart4" class="agent-chart"></div>
+        <div class="agent-conclusion">已执行储能放电策略，释放功率5.8MW，供需缺口已消除，预计节约购电成本¥12,400。</div>
+      </div>
+
+      <!-- Card 5: 复盘分析智能体 -->
+      <div class="agent-card glass-glow">
+        <div class="agent-card-header">
+          <div class="agent-name">
+            <span class="icon-dot" style="background:#00d4ff;"></span>
+            复盘分析智能体
+          </div>
+          <span class="status-badge status-completed">已完成</span>
+        </div>
+        <div class="agent-metrics">
+          <span>偏差率 <span class="val">1.8%</span></span>
+          <span>优化建议 <span class="val" style="color:#00ff88;">3条</span></span>
+          <span>准确率 <span class="val">96.4%</span></span>
+        </div>
+        <div id="chart5" class="agent-chart"></div>
+        <div class="agent-conclusion">本轮调度偏差1.8%，建议优化储充策略时序、调整风机偏航角度、新增负荷响应预案。</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== CENTER COLUMN: DIGITAL TWIN ===== -->
+  <div class="center-col">
+    <div class="center-header">
+      <div>
+        <div class="center-title">园区数字孪生场景区</div>
+        <div class="center-subtitle">AIDC ENERGY DIGITAL TWIN</div>
+      </div>
+      <div class="center-subtitle" style="text-align:right;">
+        3D WebGL · 实时拓扑<br>
+        <span style="color:#00d4ff;">数据刷新: 2s</span>
+      </div>
+    </div>
+
+    <div class="twin-container" id="twinContainer"></div>
+
+    <!-- ===== CENTER STATUS BAR ===== -->
+    <div class="center-statusbar">
+      <div class="stat">总负荷 <span class="sv">42.8MW</span></div>
+      <div class="stat">风电出力 <span class="sv">22.4MW</span></div>
+      <div class="stat">储能SOC <span class="sv">76%</span></div>
+      <div class="stat">制冷COP <span class="sv">5.2</span></div>
+      <div class="stat">PUE <span class="sv">1.18</span></div>
+      <div class="stat">绿电占比 <span class="sv" style="color:#00ff88;">52.3%</span></div>
+      <div style="flex:1;"></div>
+      <div class="stat" style="color:#5a6b8a;">WebGL场景 · 拓扑节点 24 · 链路 18 · 数据点 1,247</div>
+    </div>
+  </div>
+
+  <!-- ===== RIGHT COLUMN ===== -->
+  <div class="right-col">
+    <div class="section-title">多智能体协同决策中心</div>
+
+    <!-- Pipeline Tracker -->
+    <div class="pipeline glass-glow">
+      <div style="font-size:11px; color:#7a8bb5; margin-bottom:10px; letter-spacing:0.5px;">任务跟踪流水线</div>
+      <div class="pipeline-nodes">
+        <div class="p-node done">
+          <div class="p-node-circle">1</div>
+          <div class="p-node-label">监盘</div>
+          <div class="p-node-state">已完成</div>
+        </div>
+        <div class="p-node done">
+          <div class="p-node-circle">2</div>
+          <div class="p-node-label">预警</div>
+          <div class="p-node-state">已完成</div>
+        </div>
+        <div class="p-node active">
+          <div class="p-node-circle">3</div>
+          <div class="p-node-label">预测</div>
+          <div class="p-node-state">运行中</div>
+        </div>
+        <div class="p-node pending">
+          <div class="p-node-circle">4</div>
+          <div class="p-node-label">调度</div>
+          <div class="p-node-state">待执行</div>
+        </div>
+        <div class="p-node pending">
+          <div class="p-node-circle">5</div>
+          <div class="p-node-label">复盘</div>
+          <div class="p-node-state">待执行</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agent Workflow Timeline -->
+    <div class="workflow glass-glow" style="flex:1; min-height:0; overflow-y:auto;">
+      <div class="wf-title">智能体协作流程</div>
+      <div class="wf-list">
+        <!-- 1 -->
+        <div class="wf-item">
+          <div class="wf-dot-col">
+            <div class="wf-dot done"></div>
+            <div class="wf-line"></div>
+          </div>
+          <div class="wf-name">监盘智能体</div>
+          <div class="wf-status done">已完成</div>
+          <div class="wf-desc">发现风机出力偏差</div>
+          <div class="wf-time">14:32:05</div>
+        </div>
+        <div class="wf-event">异常事件：风机出力偏差+2.3%</div>
+
+        <!-- 2 -->
+        <div class="wf-item">
+          <div class="wf-dot-col">
+            <div class="wf-dot done"></div>
+            <div class="wf-line"></div>
+          </div>
+          <div class="wf-name">预警智能体</div>
+          <div class="wf-status done">已完成</div>
+          <div class="wf-desc">识别风险趋势</div>
+          <div class="wf-time">14:32:07</div>
+        </div>
+        <div class="wf-event">风险趋势：B3变压器温度异常</div>
+
+        <!-- 3 -->
+        <div class="wf-item">
+          <div class="wf-dot-col">
+            <div class="wf-dot active"></div>
+            <div class="wf-line"></div>
+          </div>
+          <div class="wf-name">预测智能体</div>
+          <div class="wf-status active">运行中</div>
+          <div class="wf-desc">预计出现供需缺口</div>
+          <div class="wf-time" style="color:#00d4ff;">已耗时 5.2秒</div>
+        </div>
+        <div class="wf-event">供需缺口预测：-3.2MW @14:30</div>
+
+        <!-- 4 -->
+        <div class="wf-item">
+          <div class="wf-dot-col">
+            <div class="wf-dot pending"></div>
+            <div class="wf-line"></div>
+          </div>
+          <div class="wf-name">调度智能体</div>
+          <div class="wf-status pending">待执行</div>
+          <div class="wf-desc">执行反馈</div>
+          <div class="wf-time">—</div>
+        </div>
+        <div class="wf-event">执行反馈：调度策略待生成</div>
+
+        <!-- 5 -->
+        <div class="wf-item">
+          <div class="wf-dot-col">
+            <div class="wf-dot pending"></div>
+          </div>
+          <div class="wf-name">复盘分析智能体</div>
+          <div class="wf-status pending">待执行</div>
+          <div class="wf-desc">优化建议</div>
+          <div class="wf-time">—</div>
+        </div>
+        <div class="wf-event">优化建议：待本轮完成后生成</div>
+      </div>
+    </div>
+
+    <!-- Strategy Execution Table -->
+    <div class="strategy-table glass-glow">
+      <div class="st-title">策略执行结果</div>
+      <table class="st-table">
+        <thead>
+          <tr>
+            <th>调度对象</th>
+            <th>调度指令</th>
+            <th>执行时间</th>
+            <th>执行状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>园区储能</td>
+            <td>放电 5.8MW</td>
+            <td style="font-family:'Rajdhani';">14:32:15</td>
+            <td><span class="st-status success">已完成</span></td>
+          </tr>
+          <tr>
+            <td>SST系统</td>
+            <td>降载 1.2MW</td>
+            <td style="font-family:'Rajdhani';">14:32:18</td>
+            <td><span class="st-status success">已完成</span></td>
+          </tr>
+          <tr>
+            <td>蓄冷罐群</td>
+            <td>释放冷量</td>
+            <td style="font-family:'Rajdhani';">14:32:22</td>
+            <td><span class="st-status running">执行中</span></td>
+          </tr>
+          <tr>
+            <td>需求响应</td>
+            <td>削峰 0.8MW</td>
+            <td style="font-family:'Rajdhani';">—</td>
+            <td><span class="st-status pending">待执行</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Business Benefits -->
+    <div style="font-size:11px; color:#7a8bb5; padding:0 2px 4px; letter-spacing:0.5px;">运营效益指标</div>
+    <div class="benefits">
+      <div class="benefit-card glass">
+        <div class="benefit-val">52.3%</div>
+        <div class="benefit-label">绿电占比</div>
+        <div class="benefit-change up">↑ 3.2%</div>
+      </div>
+      <div class="benefit-card glass">
+        <div class="benefit-val" style="background:linear-gradient(135deg,#ffaa00,#ff4444);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">-3.2MW</div>
+        <div class="benefit-label">供需缺口</div>
+        <div class="benefit-change down">预测缺口</div>
+      </div>
+      <div class="benefit-card glass">
+        <div class="benefit-val">¥12.4K</div>
+        <div class="benefit-label">预计节省成本</div>
+        <div class="benefit-change up">↑ 8.6%</div>
+      </div>
+      <div class="benefit-card glass">
+        <div class="benefit-val">96.8%</div>
+        <div class="benefit-label">新能源利用率</div>
+        <div class="benefit-change up">↑ 1.4%</div>
+      </div>
+      <div class="benefit-card glass">
+        <div class="benefit-val">100%</div>
+        <div class="benefit-label">调度完成率</div>
+        <div class="benefit-change up">达标</div>
+      </div>
+      <div class="benefit-card glass">
+        <div class="benefit-val">96.4%</div>
+        <div class="benefit-label">预测准确率</div>
+        <div class="benefit-change up">↑ 0.8%</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== CLOCK =====
+function updateClock() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('headerTime').textContent =
+    `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ===== ECHARTS THEME =====
+const chartTheme = {
+  backgroundColor: 'transparent',
+  textStyle: { fontFamily: "'Rajdhani', 'Noto Sans SC', sans-serif" },
+  grid: { top: 4, right: 4, bottom: 4, left: 4 },
+  xAxis: {
+    type: 'category', show: false,
+    data: Array.from({length: 20}, (_, i) => i)
+  },
+  yAxis: { type: 'value', show: false },
+  tooltip: {
+    trigger: 'axis',
+    backgroundColor: 'rgba(10,20,40,0.9)',
+    borderColor: 'rgba(0,212,255,0.3)',
+    textStyle: { color: '#e0e8ff', fontSize: 11, fontFamily: "'Rajdhani', 'Noto Sans SC'" }
+  }
+};
+
+// ===== Chart 1: 监盘 (real-time vs baseline) =====
+const c1 = echarts.init(document.getElementById('chart1'));
+c1.setOption({
+  ...chartTheme,
+  series: [
+    {
+      type: 'line', smooth: true, symbol: 'none', lineStyle: { width: 1.5 },
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: 'rgba(0,212,255,0.2)' },
+          { offset: 1, color: 'rgba(0,212,255,0)' }
+        ])
+      },
+      data: [42.1, 42.3, 42.0, 42.5, 42.8, 43.1, 42.9, 43.2, 43.0, 42.8, 42.6, 42.9, 43.1, 43.4, 43.2, 43.0, 42.8, 42.6, 42.7, 42.8],
+      itemStyle: { color: '#00d4ff' }
+    },
+    {
+      type: 'line', smooth: true, symbol: 'none',
+      lineStyle: { width: 1, type: 'dashed', color: 'rgba(0,255,136,0.4)' },
+      data: [42.0, 42.0, 42.0, 42.2, 42.2, 42.4, 42.4, 42.6, 42.6, 42.6, 42.8, 42.8, 42.8, 43.0, 43.0, 43.0, 43.0, 43.0, 43.0, 43.0],
+      itemStyle: { color: 'rgba(0,255,136,0.3)' }
+    }
+  ]
+});
+
+// ===== Chart 2: 预警 (risk level trend) =====
+const c2 = echarts.init(document.getElementById('chart2'));
+c2.setOption({
+  ...chartTheme,
+  yAxis: { ...chartTheme.yAxis, min: 0, max: 5 },
+  series: [{
+    type: 'line', smooth: true, symbol: 'none',
+    lineStyle: { width: 1.5 },
+    areaStyle: {
+      color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        { offset: 0, color: 'rgba(255,170,0,0.25)' },
+        { offset: 1, color: 'rgba(255,170,0,0)' }
+      ])
+    },
+    data: [1, 1, 1, 1, 1, 1.2, 1.5, 1.8, 2.0, 2.2, 2.5, 2.8, 3.0, 3.2, 3.0, 2.8, 2.5, 2.3, 2.2, 2.0],
+    itemStyle: { color: '#ffaa00' },
+    markLine: {
+      silent: true,
+      lineStyle: { type: 'dashed', color: 'rgba(255,68,68,0.3)' },
+      data: [{ yAxis: 3 }],
+      label: { show: false }
+    }
+  }]
+});
+
+// ===== Chart 3: 预测 (3 prediction lines) =====
+const c3 = echarts.init(document.getElementById('chart3'));
+c3.setOption({
+  ...chartTheme,
+  xAxis: {
+    ...chartTheme.xAxis,
+    data: ['13:00','13:10','13:20','13:30','13:40','13:50','14:00','14:10','14:20','14:30','14:40','14:50','15:00','15:10','15:20','15:30','15:40','15:50','16:00','16:10']
+  },
+  tooltip: { ...chartTheme.tooltip },
+  series: [
+    {
+      name: '负荷预测', type: 'line', smooth: true, symbol: 'none',
+      lineStyle: { width: 1.5, color: '#ff4444' },
+      data: [40,41,42,43,43.5,44,44.5,45,45.2,45.6,45.8,45.5,45,44.5,44,43.5,43,42.5,42,41.5],
+      itemStyle: { color: '#ff4444' }
+    },
+    {
+      name: '新能源预测', type: 'line', smooth: true, symbol: 'none',
+      lineStyle: { width: 1.5, color: '#00ff88' },
+      data: [26,27,28,28.5,29,28.5,28,27.5,27,26.8,26.5,26,25.5,25,24.5,24,23.5,23,22.5,22],
+      itemStyle: { color: '#00ff88' }
+    },
+    {
+      name: '供需平衡', type: 'line', smooth: true, symbol: 'none',
+      lineStyle: { width: 1.5, color: '#00d4ff' },
+      data: [2,3,4,4.5,5.5,5.5,5.5,5.5,5.2,4.2,4,3.5,3,2.5,2,1.5,1,0.5,0,-0.5],
+      itemStyle: { color: '#00d4ff' }
+    }
+  ],
+  legend: {
+    show: true, bottom: 0, itemWidth: 12, itemHeight: 2,
+    textStyle: { color: '#7a8bb5', fontSize: 9 },
+    data: ['负荷预测', '新能源预测', '供需平衡']
+  }
+});
+
+// ===== Chart 4: 调度 (execution progress) =====
+const c4 = echarts.init(document.getElementById('chart4'));
+c4.setOption({
+  ...chartTheme,
+  series: [{
+    type: 'line', smooth: true, symbol: 'none',
+    lineStyle: { width: 1.5, color: '#00ff88' },
+    areaStyle: {
+      color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        { offset: 0, color: 'rgba(0,255,136,0.2)' },
+        { offset: 1, color: 'rgba(0,255,136,0)' }
+      ])
+    },
+    data: [0,10,25,45,65,80,90,95,98,100,100,100,100,100,100,100,100,100,100,100],
+    itemStyle: { color: '#00ff88' }
+  }]
+});
+
+// ===== Chart 5: 复盘 (deviation analysis) =====
+const c5 = echarts.init(document.getElementById('chart5'));
+c5.setOption({
+  ...chartTheme,
+  yAxis: { ...chartTheme.yAxis, min: -5, max: 5 },
+  series: [{
+    type: 'line', smooth: true, symbol: 'none',
+    lineStyle: { width: 1.5 },
+    areaStyle: {
+      color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        { offset: 0, color: 'rgba(0,212,255,0.15)' },
+        { offset: 1, color: 'rgba(0,212,255,0)' }
+      ])
+    },
+    data: [0.5,0.8,1.2,1.8,2.1,2.5,2.2,1.8,1.5,1.2,0.8,0.5,0.3,0.1,-0.2,-0.5,-0.8,-1.0,-1.2,-1.5],
+    itemStyle: { color: '#00d4ff' },
+    markLine: {
+      silent: true,
+      lineStyle: { type: 'dashed', color: 'rgba(0,255,136,0.2)' },
+      data: [{ yAxis: 0 }],
+      label: { show: false }
+    }
+  }]
+});
+
+// ===== Handle resize for all charts =====
+window.addEventListener('resize', () => {
+  [c1, c2, c3, c4, c5].forEach(c => c.resize());
+});
+
+// ===== Simulate live data updates =====
+function simulateUpdates() {
+  // Update some metric values slightly
+  const metrics = document.querySelectorAll('.agent-metrics .val');
+  // Small visual pulse on random elements
+  const nodes = document.querySelectorAll('.twin-node-icon');
+  const randomNode = nodes[Math.floor(Math.random() * nodes.length)];
+  if (randomNode) {
+    randomNode.style.boxShadow = '0 0 25px rgba(0,212,255,0.4)';
+    setTimeout(() => { randomNode.style.boxShadow = ''; }, 500);
+  }
+}
+setInterval(simulateUpdates, 3000);
+
+(function initThreeScene() {
+  const container = document.getElementById('twinContainer');
+  if (!container || typeof THREE === 'undefined') return;
+
+  var W = container.clientWidth || 960;
+  var H = container.clientHeight || 1024;
+
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0e1a);
+  scene.fog = new THREE.Fog(0x0a0e1a, 45, 90);
+
+  var camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 200);
+  camera.position.set(24, 22, 30);
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(W, H);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  container.appendChild(renderer.domElement);
+
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.minDistance = 15;
+  controls.maxDistance = 55;
+  controls.maxPolarAngle = Math.PI / 2.15;
+  controls.minPolarAngle = 0.25;
+  controls.target.set(0, 1, 4);
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.25;
+  controls.update();
+
+  scene.add(new THREE.AmbientLight(0x1a2a4a, 0.6));
+
+  var dirLight = new THREE.DirectionalLight(0xffffff, 0.75);
+  dirLight.position.set(18, 28, 12);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.camera.near = 1;
+  dirLight.shadow.camera.far = 80;
+  dirLight.shadow.camera.left = -30;
+  dirLight.shadow.camera.right = 30;
+  dirLight.shadow.camera.top = 30;
+  dirLight.shadow.camera.bottom = -30;
+  scene.add(dirLight);
+
+  var pLight1 = new THREE.PointLight(0x00d4ff, 0.45, 35);
+  pLight1.position.set(0, 6, 2);
+  scene.add(pLight1);
+  var pLight2 = new THREE.PointLight(0x0066ff, 0.3, 28);
+  pLight2.position.set(-14, 4, -4);
+  scene.add(pLight2);
+  var pLight3 = new THREE.PointLight(0x00ff88, 0.25, 22);
+  pLight3.position.set(13, 3, 10);
+  scene.add(pLight3);
+
+  var groundMat = new THREE.MeshPhongMaterial({ color: 0x080c18, shininess: 3 });
+  var ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  var grid = new THREE.GridHelper(90, 45, 0x00d4ff, 0x0a1a30);
+  grid.material.opacity = 0.12;
+  grid.material.transparent = true;
+  grid.position.y = 0.01;
+  scene.add(grid);
+
+  var rotatingGroups = [];
+
+  function glowEdges(mesh, color) {
+    var edges = new THREE.EdgesGeometry(mesh.geometry);
+    var mat = new THREE.LineBasicMaterial({ color: color || 0x00d4ff, transparent: true, opacity: 0.55 });
+    var wf = new THREE.LineSegments(edges, mat);
+    mesh.add(wf);
+  }
+
+  function makeLabel(text, pos, col) {
+    var c = document.createElement('canvas');
+    c.width = 512; c.height = 96;
+    var ctx = c.getContext('2d');
+    ctx.font = 'bold 36px Rajdhani, sans-serif';
+    ctx.fillStyle = col || '#00d4ff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 256, 48);
+    var tex = new THREE.CanvasTexture(c);
+    var sm = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    var sp = new THREE.Sprite(sm);
+    sp.position.copy(pos);
+    sp.scale.set(7, 1.3, 1);
+    scene.add(sp);
+  }
+
+  function makeRoad(x1, z1, x2, z2, w) {
+    var dx = x2 - x1, dz = z2 - z1;
+    var len = Math.sqrt(dx * dx + dz * dz);
+    var road = new THREE.Mesh(
+      new THREE.PlaneGeometry(w || 0.4, len),
+      new THREE.MeshPhongMaterial({ color: 0x151e35, transparent: true, opacity: 0.6 })
+    );
+    road.rotation.x = -Math.PI / 2;
+    road.position.set((x1 + x2) / 2, 0.02, (z1 + z2) / 2);
+    road.rotation.z = -Math.atan2(dz, dx) + Math.PI / 2;
+    scene.add(road);
+  }
+
+  var buildings = [
+    { n: 'A区', p: '12.8', x: -6, z: 9 },
+    { n: 'E区', p: '8.2', x: -2, z: 9 },
+    { n: 'F区', p: '6.4', x: 2, z: 9 },
+    { n: 'D区', p: '10.6', x: 6, z: 9 },
+    { n: 'G区', p: '5.2', x: -6, z: 14 },
+    { n: 'H区', p: '4.8', x: -2, z: 14 },
+    { n: 'B区', p: '9.6', x: 2, z: 14 },
+    { n: 'C区', p: '8.8', x: 6, z: 14 },
+  ];
+
+  buildings.forEach(function(b) {
+    var bw = 3.2 + Math.random() * 0.4;
+    var bh = 2.2 + Math.random() * 0.8;
+    var bd = 2.4 + Math.random() * 0.3;
+    var geom = new THREE.BoxGeometry(bw, bh, bd);
+    var mat = new THREE.MeshPhongMaterial({ color: 0x182848, emissive: 0x040810, shininess: 25, transparent: true, opacity: 0.88 });
+    var m = new THREE.Mesh(geom, mat);
+    m.position.set(b.x, bh / 2, b.z);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    scene.add(m);
+    glowEdges(m, 0x00d4ff);
+
+    var roof = new THREE.Mesh(
+      new THREE.BoxGeometry(bw + 0.2, 0.08, bd + 0.2),
+      new THREE.MeshPhongMaterial({ color: 0x00d4ff, emissive: 0x003344, transparent: true, opacity: 0.35 })
+    );
+    roof.position.set(b.x, bh + 0.04, b.z);
+    scene.add(roof);
+
+    var indicator = new THREE.Mesh(
+      new THREE.SphereGeometry(0.08, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x00ff88 })
+    );
+    indicator.position.set(b.x + bw / 2 - 0.3, bh + 0.2, b.z - bd / 2 + 0.3);
+    scene.add(indicator);
+
+    makeLabel(b.n + ' ' + b.p + 'MW', new THREE.Vector3(b.x, bh + 1.2, b.z));
+  });
+
+  makeRoad(-6, 9, 6, 9, 0.3);
+  makeRoad(-6, 14, 6, 14, 0.3);
+  makeRoad(-6, 9, -6, 14, 0.3);
+  makeRoad(6, 9, 6, 14, 0.3);
+  makeRoad(0, 9, 0, 14, 0.25);
+
+  var turbinePos = [
+    { x: -17, z: -9 }, { x: -14, z: -6 }, { x: -11, z: -9 },
+    { x: -17, z: -4 }, { x: -14, z: -1 },
+  ];
+
+  turbinePos.forEach(function(pos, idx) {
+    var towerH = 7 + Math.random() * 2;
+    var tower = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.22, towerH, 8),
+      new THREE.MeshPhongMaterial({ color: 0xc8d0e0, emissive: 0x0a1020 })
+    );
+    tower.position.set(pos.x, towerH / 2, pos.z);
+    tower.castShadow = true;
+    scene.add(tower);
+
+    var nacelle = new THREE.Mesh(
+      new THREE.ConeGeometry(0.35, 1, 6),
+      new THREE.MeshPhongMaterial({ color: 0xb8c0d0 })
+    );
+    nacelle.position.set(pos.x, towerH + 0.5, pos.z);
+    scene.add(nacelle);
+
+    var hub = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 8, 8),
+      new THREE.MeshPhongMaterial({ color: 0x00d4ff, emissive: 0x002244 })
+    );
+    hub.position.set(pos.x, towerH + 0.7, pos.z);
+    scene.add(hub);
+
+    var bladeGroup = new THREE.Group();
+    bladeGroup.position.set(pos.x, towerH + 0.7, pos.z);
+    for (var j = 0; j < 3; j++) {
+      var blade = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 3.2 + Math.random() * 0.5, 0.04),
+        new THREE.MeshPhongMaterial({ color: 0xdde4f0, emissive: 0x101828 })
+      );
+      blade.position.y = 1.7;
+      var pivot = new THREE.Group();
+      pivot.add(blade);
+      pivot.rotation.z = (j * Math.PI * 2) / 3;
+      bladeGroup.add(pivot);
+    }
+    scene.add(bladeGroup);
+    rotatingGroups.push({ group: bladeGroup, speed: 1.2 + idx * 0.2, axis: 'z' });
+
+    var baseRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.3, 0.6, 16),
+      new THREE.MeshBasicMaterial({ color: 0x00d4ff, transparent: true, opacity: 0.1, side: THREE.DoubleSide })
+    );
+    baseRing.rotation.x = -Math.PI / 2;
+    baseRing.position.set(pos.x, 0.03, pos.z);
+    scene.add(baseRing);
+  });
+
+  makeLabel('风电场 22.4MW', new THREE.Vector3(-14, 11, -5), '#00ff88');
+
+  var txGeom = new THREE.BoxGeometry(3.2, 2.2, 2.8);
+  var txMat = new THREE.MeshPhongMaterial({ color: 0x1a2a4a, emissive: 0x0a1520 });
+  var tx = new THREE.Mesh(txGeom, txMat);
+  tx.position.set(0, 1.1, -5);
+  tx.castShadow = true;
+  scene.add(tx);
+  glowEdges(tx, 0xffaa00);
+
+  var cage = new THREE.Mesh(
+    new THREE.BoxGeometry(4.2, 3.2, 3.8),
+    new THREE.MeshBasicMaterial({ color: 0x00d4ff, wireframe: true, transparent: true, opacity: 0.15 })
+  );
+  cage.position.set(0, 1.6, -5);
+  scene.add(cage);
+
+  for (var i = 0; i < 4; i++) {
+    var insul = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.07, 2.2, 6),
+      new THREE.MeshPhongMaterial({ color: 0x808898, emissive: 0x1a1a2a })
+    );
+    insul.position.set(-1.2 + i * 0.8, 3.3, -5);
+    scene.add(insul);
+    var bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 8, 8),
+      new THREE.MeshPhongMaterial({ color: 0x00d4ff, emissive: 0x004466 })
+    );
+    bulb.position.set(-1.2 + i * 0.8, 4.5, -5);
+    scene.add(bulb);
+  }
+
+  makeLabel('变电站 42.8MW', new THREE.Vector3(0, 5.5, -5), '#ffaa00');
+
+  var sstMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(2.8, 1.6, 2.2),
+    new THREE.MeshPhongMaterial({ color: 0x102040, emissive: 0x0066ff, emissiveIntensity: 0.15 })
+  );
+  sstMesh.position.set(0, 0.8, 3);
+  sstMesh.castShadow = true;
+  scene.add(sstMesh);
+  glowEdges(sstMesh, 0x00d4ff);
+
+  var sstGlow = new THREE.Mesh(
+    new THREE.BoxGeometry(1.8, 0.9, 1.4),
+    new THREE.MeshBasicMaterial({ color: 0x00d4ff, transparent: true, opacity: 0.12 })
+  );
+  sstGlow.position.set(0, 0.8, 3);
+  scene.add(sstGlow);
+
+  makeLabel('SST 97.6%', new THREE.Vector3(0, 2.8, 3));
+
+  var bessGroup = new THREE.Group();
+  bessGroup.position.set(14, 0, 11);
+  for (var r = 0; r < 3; r++) {
+    for (var c = 0; c < 4; c++) {
+      var soc = 0.76;
+      var cellCol = new THREE.Color().lerpColors(new THREE.Color(0x2a1a00), new THREE.Color(0x00ff88), soc);
+      var cell = new THREE.Mesh(
+        new THREE.BoxGeometry(0.85, 0.55, 0.85),
+        new THREE.MeshPhongMaterial({ color: cellCol, emissive: cellCol, emissiveIntensity: 0.25, transparent: true, opacity: 0.85 })
+      );
+      cell.position.set(c * 1.15 - 1.7, 0.3 + r * 0.65, 0);
+      cell.castShadow = true;
+      bessGroup.add(cell);
+      glowEdges(cell, 0x00ff88);
+    }
+  }
+  var bessFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(5.2, 2.4, 1.4),
+    new THREE.MeshBasicMaterial({ color: 0x00ff88, wireframe: true, transparent: true, opacity: 0.12 })
+  );
+  bessFrame.position.set(0, 1.2, 0);
+  bessGroup.add(bessFrame);
+  scene.add(bessGroup);
+  makeLabel('储能 SOC 76%', new THREE.Vector3(14, 3.8, 11), '#00ff88');
+
+  var coolGroup = new THREE.Group();
+  coolGroup.position.set(-13, 0, 11);
+  for (var ci = 0; ci < 2; ci++) {
+    var ct = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.1, 1.4, 2.8, 12),
+      new THREE.MeshPhongMaterial({ color: 0x1a2a4a, emissive: 0x001133 })
+    );
+    ct.position.set(ci * 3.8, 1.4, 0);
+    ct.castShadow = true;
+    coolGroup.add(ct);
+    glowEdges(ct, 0x0066ff);
+
+    var fanG = new THREE.Group();
+    fanG.position.set(ci * 3.8, 2.9, 0);
+    for (var fi = 0; fi < 4; fi++) {
+      var fb = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.04, 1.6),
+        new THREE.MeshPhongMaterial({ color: 0x88aacc })
+      );
+      fb.rotation.y = (fi * Math.PI) / 2;
+      fanG.add(fb);
+    }
+    coolGroup.add(fanG);
+    rotatingGroups.push({ group: fanG, speed: 2 + ci * 0.4, axis: 'y' });
+
+    var steam = new THREE.Mesh(
+      new THREE.SphereGeometry(0.7, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x0066ff, transparent: true, opacity: 0.06 })
+    );
+    steam.position.set(ci * 3.8, 3.5, 0);
+    coolGroup.add(steam);
+  }
+  scene.add(coolGroup);
+  makeLabel('制冷 COP 5.2', new THREE.Vector3(-13, 4.8, 11), '#0066ff');
+
+  var gridIcon = new THREE.Mesh(
+    new THREE.OctahedronGeometry(1, 0),
+    new THREE.MeshPhongMaterial({ color: 0x0066ff, emissive: 0x0033aa, emissiveIntensity: 0.3 })
+  );
+  gridIcon.position.set(0, 2.2, -13);
+  scene.add(gridIcon);
+  glowEdges(gridIcon, 0x0066ff);
+  rotatingGroups.push({ group: gridIcon, speed: 0.4, axis: 'y' });
+  makeLabel('外部电网 24.2MW', new THREE.Vector3(0, 4.5, -13), '#0066ff');
+
+  var genMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 1.5, 2),
+    new THREE.MeshPhongMaterial({ color: 0x2a2010, emissive: 0x1a1000 })
+  );
+  genMesh.position.set(-12, 0.75, -8);
+  genMesh.castShadow = true;
+  scene.add(genMesh);
+  glowEdges(genMesh, 0xffaa00);
+  makeLabel('柴发 10MW 备用', new THREE.Vector3(-12, 2.8, -8), '#ffaa00');
+
+  var flowPaths = [
+    { s: new THREE.Vector3(-14, 2, -5), e: new THREE.Vector3(0, 2, -5), c: new THREE.Color(0x00d4ff), n: 35 },
+    { s: new THREE.Vector3(0, 3, -13), e: new THREE.Vector3(0, 2, -5), c: new THREE.Color(0x0066ff), n: 25 },
+    { s: new THREE.Vector3(0, 2, -5), e: new THREE.Vector3(0, 1.5, 3), c: new THREE.Color(0x00d4ff), n: 35 },
+    { s: new THREE.Vector3(0, 1.5, 3), e: new THREE.Vector3(-4, 1.5, 9), c: new THREE.Color(0x00d4ff), n: 30 },
+    { s: new THREE.Vector3(0, 1.5, 3), e: new THREE.Vector3(4, 1.5, 9), c: new THREE.Color(0x00d4ff), n: 30 },
+    { s: new THREE.Vector3(-4, 1.5, 12), e: new THREE.Vector3(-13, 1.5, 11), c: new THREE.Color(0x0066ff), n: 25 },
+    { s: new THREE.Vector3(4, 1.5, 12), e: new THREE.Vector3(14, 1.5, 11), c: new THREE.Color(0x00ff88), n: 25 },
+    { s: new THREE.Vector3(14, 1.5, 11), e: new THREE.Vector3(0, 2, -5), c: new THREE.Color(0x00ff88), n: 20 },
+  ];
+
+  flowPaths.forEach(function(fp) {
+    var pts = [];
+    var mid = new THREE.Vector3().lerpVectors(fp.s, fp.e, 0.5);
+    mid.y += 2;
+    var curve = new THREE.QuadraticBezierCurve3(fp.s, mid, fp.e);
+    var linePts = curve.getPoints(30);
+    var lg = new THREE.BufferGeometry().setFromPoints(linePts);
+    scene.add(new THREE.Line(lg, new THREE.LineBasicMaterial({ color: fp.c, transparent: true, opacity: 0.06 })));
+  });
+
+  var pCount = 280;
+  var pPos = new Float32Array(pCount * 3);
+  var pCol = new Float32Array(pCount * 3);
+  var pData = [];
+  var pIdx = 0;
+
+  flowPaths.forEach(function(fp) {
+    for (var pi = 0; pi < fp.n && pIdx < pCount; pi++) {
+      pData.push({ fp: fp, t: Math.random(), spd: 0.0015 + Math.random() * 0.003 });
+      var pt = fp.s;
+      pPos[pIdx * 3] = pt.x;
+      pPos[pIdx * 3 + 1] = pt.y;
+      pPos[pIdx * 3 + 2] = pt.z;
+      pCol[pIdx * 3] = fp.c.r;
+      pCol[pIdx * 3 + 1] = fp.c.g;
+      pCol[pIdx * 3 + 2] = fp.c.b;
+      pIdx++;
+    }
+  });
+
+  var pGeom = new THREE.BufferGeometry();
+  pGeom.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+  pGeom.setAttribute('color', new THREE.BufferAttribute(pCol, 3));
+
+  var ptCanvas = document.createElement('canvas');
+  ptCanvas.width = 32; ptCanvas.height = 32;
+  var ptCtx = ptCanvas.getContext('2d');
+  var grad = ptCtx.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.3, 'rgba(255,255,255,0.7)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ptCtx.fillStyle = grad;
+  ptCtx.fillRect(0, 0, 32, 32);
+
+  var particles = new THREE.Points(pGeom, new THREE.PointsMaterial({
+    size: 0.22,
+    map: new THREE.CanvasTexture(ptCanvas),
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.85,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }));
+  scene.add(particles);
+
+  var clock = new THREE.Clock();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    var dt = clock.getDelta();
+    var el = clock.getElapsedTime();
+
+    rotatingGroups.forEach(function(rg) {
+      if (rg.axis === 'z') rg.group.rotation.z += dt * rg.speed;
+      else if (rg.axis === 'y') rg.group.rotation.y += dt * rg.speed;
+    });
+
+    gridIcon.position.y = 2.2 + Math.sin(el * 1.5) * 0.3;
+
+    for (var i = 0; i < pIdx; i++) {
+      var d = pData[i];
+      d.t += d.spd;
+      if (d.t > 1) d.t -= 1;
+      var t = d.t;
+      var s = d.fp.s, e = d.fp.e;
+      var midY = Math.max(s.y, e.y) + 1.5;
+      var arcY = Math.sin(t * Math.PI) * (midY - Math.max(s.y, e.y));
+      pPos[i * 3] = s.x + (e.x - s.x) * t;
+      pPos[i * 3 + 1] = s.y + (e.y - s.y) * t + arcY;
+      pPos[i * 3 + 2] = s.z + (e.z - s.z) * t;
+    }
+    pGeom.attributes.position.needsUpdate = true;
+
+    pLight1.intensity = 0.4 + Math.sin(el * 2) * 0.12;
+    pLight2.intensity = 0.25 + Math.sin(el * 1.7 + 1) * 0.08;
+
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', function() {
+    var w = container.clientWidth;
+    var h = container.clientHeight;
+    if (w > 0 && h > 0) {
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+  });
+})();
+</script>
+</body>
+</html>

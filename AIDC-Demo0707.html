@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIDC AI电力系统 可视化大屏</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root{
+  --bg0:#04070e; --bg1:#070b15; --panel:rgba(10,18,30,0.6);
+  --teal:#2de0c0; --cyan:#33d1ff; --green:#00ff9d; --line:rgba(45,224,192,0.18);
+  --txt:#c5d3e0; --dim:#5f7385;
+}
+/* ---------- top nav ---------- */
+#top-nav{height:54px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 22px;background:linear-gradient(180deg,rgba(6,12,22,0.95),rgba(6,12,22,0.7));
+  border-bottom:1px solid var(--line);position:relative;z-index:50;}
+.logo{display:flex;align-items:center;gap:8px;}
+.logo-mark{color:var(--teal);font-size:20px;text-shadow:0 0 10px var(--teal);}
+.logo-en{font-size:19px;font-weight:800;letter-spacing:.5px;color:#eaf6f2;}
+.logo-cn{font-size:17px;font-weight:700;color:#9fb4c2;}
+.tabs{display:flex;gap:2px;background:rgba(255,255,255,0.02);padding:4px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);}
+.tab-btn{padding:7px 18px;border:none;background:transparent;color:var(--dim);font-size:13px;
+  cursor:pointer;border-radius:5px;transition:all .25s;white-space:nowrap;font-family:inherit;}
+.tab-btn:hover{color:var(--teal);}
+.tab-btn.active{color:#04121a;font-weight:700;
+  background:linear-gradient(135deg,var(--teal),var(--cyan));
+  box-shadow:0 0 14px rgba(45,224,192,0.5);}
+.time{font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums;letter-spacing:.5px;}
+main#content{flex:1;overflow:hidden;position:relative;}
+/* ---------- layout ---------- */
+.page{display:none;height:100%;padding:14px 18px;}
+.page.active{display:flex;gap:14px;}
+.panel-left,.panel-right{width:290px;min-width:290px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;}
+.panel-center{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;}
+/* overview special: wide scene + 2x2 grid */
+.ov-grid{width:520px;min-width:520px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:10px;height:100%;}
+/* ---------- cards ---------- */
+.card{background:linear-gradient(180deg,rgba(12,22,36,0.7),rgba(8,14,24,0.55));
+  border:1px solid var(--line);border-radius:8px;padding:13px;position:relative;overflow:hidden;
+  backdrop-filter:blur(4px);}
+.card::before{content:'';position:absolute;top:0;left:12px;width:26px;height:2px;
+  background:linear-gradient(90deg,var(--teal),transparent);}
+.card-corner::after{content:'';position:absolute;top:6px;right:6px;width:8px;height:8px;
+  border-top:1px solid var(--teal);border-right:1px solid var(--teal);opacity:.6;}
+.card-title{font-size:13px;color:#dff5ef;margin-bottom:9px;font-weight:600;display:flex;align-items:center;gap:7px;letter-spacing:.5px;}
+.card-title::before{content:'';width:3px;height:12px;background:linear-gradient(180deg,var(--teal),var(--cyan));border-radius:2px;box-shadow:0 0 6px var(--teal);}
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.metric-item{background:rgba(45,224,192,0.04);border:1px solid rgba(45,224,192,0.1);border-radius:6px;padding:10px;text-align:center;}
+.metric-value{font-size:22px;font-weight:800;color:var(--teal);text-shadow:0 0 10px rgba(45,224,192,0.4);font-variant-numeric:tabular-nums;}
+.metric-label{font-size:11px;color:var(--dim);margin-top:3px;}
+.metric-unit{font-size:10px;color:#4a6472;}
+.chart-container{width:100%;height:200px;}
+.chart-container-sm{width:100%;height:100%;min-height:150px;}
+.chart-container-lg{width:100%;height:280px;}
+/* ---------- scene ---------- */
+.scene-3d{flex:1;position:relative;overflow:hidden;min-height:300px;border-radius:8px;
+  background:radial-gradient(ellipse at 50% 55%,rgba(20,70,90,0.25),transparent 65%);}
+.scene-3d canvas{position:absolute;inset:0;width:100%;height:100%;}
+.scene-label{position:absolute;top:14px;left:16px;font-size:12px;color:var(--dim);letter-spacing:1px;z-index:2;}
+.scene-label b{color:var(--teal);}
+/* ---------- sub tabs ---------- */
+.sub-tabs{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;}
+.sub-tab-btn{padding:6px 14px;border:1px solid var(--line);background:rgba(255,255,255,0.02);
+  color:var(--dim);font-size:12px;cursor:pointer;border-radius:5px;transition:all .25s;font-family:inherit;}
+.sub-tab-btn:hover{color:var(--teal);border-color:var(--teal);}
+.sub-tab-btn.active{color:#04121a;font-weight:700;background:linear-gradient(135deg,var(--teal),var(--cyan));border-color:transparent;box-shadow:0 0 12px rgba(45,224,192,0.4);}
+.sub-page{display:none;flex:1;gap:12px;}
+.sub-page.active{display:flex;}
+/* ---------- misc ---------- */
+.status-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:7px;vertical-align:middle;}
+.status-online{background:var(--green);box-shadow:0 0 6px var(--green);}
+.status-warning{background:#f5a623;box-shadow:0 0 6px #f5a623;}
+.info-list{font-size:12px;line-height:2;}
+.info-list .k{color:var(--dim);}
+.info-list .v{color:var(--teal);float:right;}
+.agent-card{background:rgba(45,224,192,0.04);border:1px solid rgba(45,224,192,0.1);border-radius:6px;padding:9px;margin-bottom:7px;}
+.agent-name{font-size:12px;font-weight:600;color:var(--teal);margin-bottom:3px;}
+.agent-desc{font-size:11px;color:var(--dim);line-height:1.5;}
+.strat-item{padding:7px 10px;border-radius:5px;margin-bottom:5px;font-size:12px;cursor:pointer;border:1px solid transparent;transition:all .2s;}
+.strat-item:hover{border-color:var(--teal);}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(45,224,192,0.3);border-radius:2px;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0.3;}}
+html,body{height:100%;}
+body {
+  font-family: 'Microsoft YaHei','PingFang SC',sans-serif;
+  background:
+    radial-gradient(ellipse at 30% 40%, rgba(20,60,80,0.35), transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(30,80,120,0.2), transparent 55%),
+    linear-gradient(160deg,#04070e 0%,#060a13 50%,#04070e 100%);
+  color:var(--txt); height:100vh; overflow:hidden;
+}
+#app{height:100vh;display:flex;flex-direction:column;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="top-nav">
+    <div class="logo">
+      <img src="about-logo.png" alt="Envision" style="height:32px;width:auto;filter:brightness(0) invert(1);opacity:0.9;">
+      <span class="logo-en" style="font-size:16px;letter-spacing:.8px;">AIDC AI电力系统</span>
+      <span class="logo-cn" style="font-size:14px;margin-left:2px;">可视化大屏</span>
+    </div>
+    <nav class="tabs" id="main-tabs"></nav>
+    <div class="header-right" style="display:flex;align-items:center;gap:14px;">
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAAAeCAYAAAC7Q5mxAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAmySURBVGhD7VlprF1VFb4d1Dpb9fGGs75vnXr7oFq1qFVUMBakKGiMRKkVUHBIUVGMaWw01ApFCsUJamUSYiCUKkoBKZqKA1VUxlgoSKsMxohSKVYFrQgtNd9l7et+u/f2FUJ/+Vaycu/Z81l7Dd9ap9HYCVVV9T6S/yT51UajMa7sH6Od0MyZMyeSvKGu6+0AfqPncswYjULu/nV330zy06kNwMvc/SQArxk5eowknLfUdT0zPQ8PDz+vqqrpjUboro+2ke12szmS/B3Jwc7k/3caGhrai+SDAC4q+zIaB+CX7r5dDOAD5YAuNHF4ePgZM2bMeFrZMRppjuZOmzbt6aNxo9EYX0yfUDzvEklpABwkS8vbAUwhOau/v//ZeXuHSH5CmgXgY2VfTgoomQDnlf0lAfiCu99KcoWe67p+T13Xp5I8OWd3X+LuB+dz3f18krcCuKMXk7yN5C0kZ6R5/f39NcmbSH4LwIkATiK5mOTb9Z5mdrLadDYzW9hqtfZIc0keqMCpPl2Kmb2JZBPAApIPNZvNvdx9krvv7+6vzA97CMlv6gY6jV2ormsH8GuSfyH56rK/JJl8q9VqB6J4XqnAlC4hsdpInpHPdfe2tksYAH4F4LqCfwHgzxpTVdUBaR6AN5brh3KcS3JDvj/JR83s5WkuyWMicH4ktPFhvQPJhSQ1vlnX9ZxYb1nnsAFTSjPoSgMDA31aqGzvRiRPdfcNAL4bzxe6+xaS/8pZbWa2uJh7Lcm/mtnBJPcluV/O7v4GAN+QIMys47tJHhbCWS0BhKC/BGAOybuCT5E7AvCf3FwBnBbC3V/uB8B9AH6QBFhV1Z4AVrj7Y/ml7TYS/JEfazQabR8otZcpSSg5q62u66n5XJLXhCBG5UKA75bWSggA/m5m89Wuc0ggsoIY9znNzQVI8rLY8/0k3xzjfxYm/6i7HwBgI4C7+/r6npPmPSkKwew2ioNLg84FsLRkmbxMuRSgmb0WwGfktwA8QvIKBbyqqt5F8l6Sl8f6J5QCBLA6BCgr2RL/b5QGh7WcEu7mrPYERbq6rvd+opmG/AzJK3Wosi8nmXtVVabf2bNnTxD0MbOqGzebzf78HGFiD5nZxyWALnw0gLbGVFUlk2sTyfnJz0lAyQeamUz5D9KyGLeDAEkq+1pLcp0CWPAKkqfHZS6S2+jgYJI63OYybI9CEsTVcRP3uvtAOSBoPIAfu/sm3awEGfhxUw++eXBw8FlpsnxN4fA7nNrEAP6dB4Kqqt4mwQJQoHvMzFaZ2UWKyCT/uDMBVlX1el2Akodg/T8y0IT2G4EUdMhbwgm/dUTHTsjMXhimkF7i0HJMkAR4R0SsGwUv5LRzzUj/I/Ldn/uVwF5HuvsR7n64/FAyqWg7Qv3yoWUAFF7TGQGsA/ApmbsuOi780lj/+FKAZnaGzpJzBJ25sbdg0wUAlot1C1uDOzhqNBoaGnpRLkAdsBwTJOC9zN3lO27q7+/fQ+YgBxyatEbCiHVuB3C+MJYmyqQBnEfyHJJnkzyT5Pfihe+RD4r2swMvfjjfWOYdlzJP5wtBKLjcJXikACFEQHJb4QO/HIK6AcBPST4A4PdmNixlKIWrCbLrdbnp7AIpvF+XadCIwxekosSd8iWpQYcMrfOhoaEDu61hZq8oTbXU3MRh5nkGpT0FgbZKi6uq2jvmSuBtIWTrPeLuL0kTlShoj8HBQcZz2xW4+wuU6rr7KglWrkmsgx4r9J1tvkukjCUOsGVgYOClZX+iMCWZgATYDhAALhUkkJbJX2kdAB/N50nL3f1Ync/dtVdPJnmc0qw0V4FK2E2RM7W5+3JhUgCflf9OrAhvZs/M5n4ltPz4CFQKKDr/CUaillPI+2TRxBGlTd59nZoeXfTkVAtSLTFIgASBfNAnAO7oJUGRmHyS5pEz7uvDiVqvV1hiRrEkpmpktrarqNDNbIthTVdWyqqq+COBMsZkpMzkm3zOZcOEDb7ftqiNDOSq/tN1GpQCF3kNgq/UM4J2hyd3Lue5+bekzSkymhGcFulQ9d9/fiAD/K98x8oDDo95WyApgfPnhb5MVt/yqN7myoCJkv9FRRJsC1At5mdqU2T4HHzA6NF1kUfqcTTUn+PKrishvzAxznPI/kDzW/ANJtAQL4mwJTFz7PzC4M/z9CgMkHTpkyBfEsH6igJQFulQYCWBlC3q89KZz6g8ot88W6kJzzJ0l+furUqc8tO7tRCPDOKEDMCmFtTiaXBBjt9+TloggE/5CwVEWJvTssPwxgVWhgB0hLgAA2CHIMDg6+uGT514BU9wP4SZoXeyYfuCj2FKAWdpXZPyy4F7h5fRsxDA8P96miESp5er5YSapC6LBhGgvK/m6kWl2g+Y2KdoGjlqT+ZrO5T4YDN+YClJmrXThSnEyyR9vr0rzQQO2jSope/rfxm1jPsgrBt6vTvNizlw+UBqrMtTQKyo/LSvhPJZ1QySvyxUoSDkvaoptJmG1nJNAt3BdacogyhrJkJm1yd+W2CxuNhoqjqX1WmJRy3q8phw3t0HrLok0p1oLp06d3BB8C1Pl28HklywV0DpIJUBAl9lPhQD7wrDB5WYPql48jD+V0mQDbRU+RqihR6W2T/ssMY5w2eEDAOPX3Ir1kdtibSU5TSicMKJbfU4YgSBPrdXLhiNJzUr6t+mO8XLs0JgBc1/VRkct3KEx4vWqQKoCW3Gq19nT3Vyl97GLCbR+oMfG8Uq5FkCj2PigbPrHR19c3AGBTmFC7wiwzkrNVRVcapDYVHSKFSgLcKF+SLdaNxocmKHptiwMoKCiL+VPOciMC5zmgJzk7TGjN5MmTny+4Emu0y1Hyn3Hu6/PvNkmAsc/cbmxmx6lQ0U2AALZKwGamXFi1zLvN7EPx7oJgKi5cIk4bqrh4vbRAzwKQGhyHz7/IKdVKDv+aXQCUKjrcFkm8SvY7mFDiEMR9mQ+cAOCqyKOPluYmXyl/pAEKZEqz4sX2zfbVxa1J/rEXx57Ls3lti9E+AvjZfmslmwSNcu5sWCTxF6dNcicbdTZ95txaVdVhqb0XSWtVBBB8CXMU9JBJXF6y/K+ZnZP8aqvVksZdoFtWKSw+JVwWXwX1pbBNmalc5e4jymrurgxHGY/WFxQpWXteYmb75POkaXIR0kDJQX7QzN6rvqiKX2xmqi+2z53P7VDCVmL5vcIvqaIs/POE6oeJJNTyi1r2ZS3/cjc+CrbJNMfFmPID/7heX/3SXvotucdaognpK182bof+7Mw7EsnvZBq4puwfo1FIADLTwBPL/jEahUhOjm8NSoeGyv4x+h/9F31HajrVRjEgAAAAAElFTkSuQmCC"
+           alt="Envision Logo" style="height:30px;object-fit:contain;opacity:0.92;">
+      <span class="time" id="clock"></span>
+    </div>
+  </header>
+  <main id="content"></main>
+</div>
+<script>
+// ============ MOCK DATA ============
+const MOCK={overview:{itLoadIncrease:20,tokenEnergy:1.2,greenRatio:82,pue:1.13,windPower:45.6,solarPower:32.1,bessSoc:78,totalLoad:96.5},
+  greenToken:{windOutput:[42,44,46,45,43,47,48,46,44,42,40,38,36,38,42,45,47,49,48,46,44,43,41,39],solarOutput:[0,0,0,0,5,12,22,30,35,38,36,34,32,28,22,15,8,3,0,0,0,0,0,0],bessSoc:[80,78,76,74,72,70,68,72,76,80,82,84,86,84,82,80,78,76,74,72,70,68,66,64],curtailRate:5.2,greenPct:100,tokenEnergy:1.1},
+  carbon:{scope1:120,scope2:450,totalReduction:380,neutralProgress:67,intensity:0.42},
+  prediction:{weather:{temp:[],wind:[],solar:[]},power:[],load:[],task:[]},
+  aiPower:{windCurve:[],storageCurve:[],loadCurve:[],sstCurve:[]},
+  ov:{itLoad:[],tokenBar:[],green:[],pue:[]}};
+for(let i=0;i<24;i++){
+  MOCK.prediction.weather.temp.push(25+Math.sin(i/4)*8+Math.random()*2);
+  MOCK.prediction.weather.wind.push(6+Math.sin(i/3)*3+Math.random());
+  MOCK.prediction.weather.solar.push(i>=6&&i<=18?Math.sin((i-6)/12*Math.PI)*800+Math.random()*50:0);
+  MOCK.prediction.power.push(40+Math.sin(i/4)*15+Math.random()*5);
+  MOCK.prediction.load.push(85+Math.sin(i/6)*10+Math.random()*3);
+  MOCK.prediction.task.push(70+Math.sin(i/5)*20+Math.random()*5);
+  MOCK.aiPower.windCurve.push(45+Math.sin(i/3)*12+Math.random()*3);
+  MOCK.aiPower.storageCurve.push(20+Math.cos(i/4)*15+Math.random()*2);
+  MOCK.aiPower.loadCurve.push(90+Math.sin(i/5)*8+Math.random()*2);
+  MOCK.aiPower.sstCurve.push(30+Math.sin(i/3.5)*10+Math.random()*2);
+  MOCK.ov.itLoad.push(78+Math.sin(i/3)*10+Math.random()*4);
+  MOCK.ov.tokenBar.push(0.9+Math.abs(Math.sin(i/2))*0.5+Math.random()*0.1);
+  MOCK.ov.green.push(80+Math.sin(i/5)*6+Math.random()*3);
+  MOCK.ov.pue.push(1.1+Math.abs(Math.sin(i/4))*0.08+Math.random()*0.02);
+}
+const TABS=[{id:'overview',name:'总览'},{id:'green-token',name:'绿色Token生产'},{id:'carbon',name:'碳管理'},{id:'prediction',name:'多维预测'},{id:'ai-power',name:'AI电力系统'},{id:'agent',name:'智能体运营'}];
+const AI_SUB_TABS=[{id:'ai-main',name:'AI电力系统总览'},{id:'ai-source',name:'源侧响应'},{id:'ai-storage',name:'储能响应'},{id:'ai-supply',name:'供电侧(SST配储)'},{id:'ai-it',name:'IT侧响应'},{id:'ai-cooling',name:'制冷侧响应'}];
+let currentTab='overview',currentSubTab='ai-main',gtTimeRange='30d',charts={};
+
+function initTabs(){
+  const nav=document.getElementById('main-tabs');
+  nav.innerHTML=TABS.map(t=>`<button class="tab-btn${t.id===currentTab?' active':''}" data-tab="${t.id}">${t.name}</button>`).join('');
+  nav.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>{
+    currentTab=btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');renderPage();
+  }));
+}
+function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleString('zh-CN',{hour12:false});}
+setInterval(updateClock,1000);updateClock();
+
+function renderPage(){
+  const content=document.getElementById('content');
+  switch(currentTab){
+    case 'overview':content.innerHTML=renderOverview();break;
+    case 'green-token':content.innerHTML=renderGreenToken();break;
+    case 'carbon':content.innerHTML=renderCarbon();break;
+    case 'prediction':content.innerHTML=renderPrediction();break;
+    case 'ai-power':content.innerHTML=renderAIPower();setTimeout(()=>renderAISubPage(),40);return;
+    case 'agent':content.innerHTML=renderAgent();break;
+  }
+  setTimeout(()=>initCharts(),80);
+}
+
+// ---------- OVERVIEW (matches reference image) ----------
+function renderOverview(){
+  return `<div class="page active">
+    <div class="panel-center">
+      <div class="scene-3d">
+        <div class="scene-label"><b>AIDC</b> \u56ed\u533a\u6570\u5b57\u5b5e\u751f \u00b7 \u6e90\u7f51\u8377\u50a8\u5168\u666f</div>
+        <div style="position:absolute;top:12px;right:16px;z-index:10;display:flex;gap:6px;align-items:center;">
+          <button onclick="sceneAngle-=10;initCanvasScenes()" style="padding:4px 10px;font-size:11px;background:rgba(45,224,192,0.12);border:1px solid rgba(45,224,192,0.4);color:#2de0c0;border-radius:4px;cursor:pointer;">\u2190 \u5de6\u65cb</button>
+          <span id="angle-display" style="font-size:11px;color:#5f7385;min-width:40px;text-align:center;">60\u00b0</span>
+          <button onclick="sceneAngle+=10;initCanvasScenes()" style="padding:4px 10px;font-size:11px;background:rgba(45,224,192,0.12);border:1px solid rgba(45,224,192,0.4);color:#2de0c0;border-radius:4px;cursor:pointer;">\u53f3\u65cb \u2192</button>
+          <button onclick="sceneTilt=Math.max(0.1,sceneTilt-0.08);initCanvasScenes()" style="padding:4px 8px;font-size:11px;background:rgba(45,224,192,0.08);border:1px solid rgba(45,224,192,0.3);color:#5f7385;border-radius:4px;cursor:pointer;">\u4fef</button>
+          <button onclick="sceneTilt=Math.min(0.85,sceneTilt+0.08);initCanvasScenes()" style="padding:4px 8px;font-size:11px;background:rgba(45,224,192,0.08);border:1px solid rgba(45,224,192,0.3);color:#5f7385;border-radius:4px;cursor:pointer;">\u4ef0</button>
+        </div>
+        <canvas id="canvas-overview"></canvas>
+      </div>
+    </div>
+    <div class="ov-grid">
+      <div class="card card-corner" style="display:flex;flex-direction:column;"><div class="card-title">IT \u8d1f\u8377</div><div style="flex:1;min-height:0;" id="chart-ov-itload"></div></div>
+      <div class="card card-corner" style="display:flex;flex-direction:column;"><div class="card-title">\u5355\u4f4dToken\u7535\u8017</div><div style="flex:1;min-height:0;" id="chart-ov-token"></div></div>
+      <div class="card card-corner" style="display:flex;flex-direction:column;"><div class="card-title">\u7eff\u7535\u4f9b\u7ed9\u5360\u6bd4</div><div style="flex:1;min-height:0;" id="chart-ov-green"></div></div>
+      <div class="card card-corner" style="display:flex;flex-direction:column;"><div class="card-title">PUE</div><div style="flex:1;min-height:0;" id="chart-ov-pue"></div></div>
+    </div>
+  </div>`;
+}
+
+function renderGreenToken(){
+  const soc=MOCK.overview.bessSoc;
+  const greenPct=MOCK.greenToken.greenPct;
+  return `<div class="page active">
+    <div class="panel-center">
+      <div class="scene-3d">
+        <div class="scene-label"><b>绿电全链路</b> 风机 → 升压站 → 降压站 → SST → IT机房</div>
+        <canvas id="canvas-greentoken"></canvas>
+        <div style="position:absolute;top:0;left:0;width:200px;height:100%;padding:12px;display:flex;flex-direction:column;gap:6px;z-index:5;pointer-events:none;">
+          ${[
+            ['① 风力发电','风机实时出力','#00ff9d',MOCK.overview.windPower+' MW'],
+            ['② 升压并网','升压站运行状态','#33d1ff','正常'],
+            ['③ 降压配电','降压站运行状态','#33d1ff','正常'],
+            ['④ SST变换供电','SST实时功率','#2de0c0','18.4 MW'],
+            ['⑤ IT机柜接入','机柜总负载','#a882ff',MOCK.overview.totalLoad+' MW'],
+            ['⑥ Token产出','单位电耗','#00ff9d',MOCK.greenToken.tokenEnergy+' kWh/百万'],
+          ].map(([title,sub,color,val])=>`
+            <div style="background:rgba(4,10,20,0.72);border:1px solid ${color}33;border-left:2px solid ${color};border-radius:4px;padding:5px 8px;">
+              <div style="font-size:11px;font-weight:600;color:${color};">${title}</div>
+              <div style="font-size:10px;color:#5f7385;">${sub}</div>
+              <div style="font-size:12px;font-weight:700;color:#c5d3e0;">${val}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div style="width:300px;min-width:300px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;">
+      <!-- Row 1 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex-shrink:0;">
+        <div class="card card-corner">
+          <div class="card-title">风机出力</div>
+          <div style="font-size:22px;font-weight:800;color:var(--green);text-shadow:0 0 10px rgba(0,255,157,0.4);">${MOCK.overview.windPower}<span style="font-size:11px;color:var(--dim);margin-left:3px;">MW</span></div>
+          <div style="height:52px;margin-top:4px;" id="chart-gt-wind"></div>
+        </div>
+        <div class="card card-corner">
+          <div class="card-title">储能当前状态</div>
+          <div style="font-size:22px;font-weight:800;color:var(--cyan);text-shadow:0 0 10px rgba(51,209,255,0.4);">${soc}<span style="font-size:11px;color:var(--dim);margin-left:2px;">%</span></div>
+          <div style="margin:5px 0 4px;background:rgba(51,209,255,0.1);border-radius:3px;height:6px;overflow:hidden;">
+            <div style="width:${soc}%;height:100%;background:linear-gradient(90deg,var(--cyan),var(--teal));border-radius:3px;"></div>
+          </div>
+          <div style="font-size:10px;color:var(--dim);display:flex;justify-content:space-between;margin-top:3px;">
+            <span>循环 <b style="color:var(--cyan);">1,284</b> 次</span>
+          </div>
+          <div style="font-size:10px;color:var(--dim);display:flex;justify-content:space-between;margin-top:2px;">
+            <span>今日充电 <b style="color:var(--teal);">3.2h</b></span>
+            <span>放电 <b style="color:var(--green);">1.8h</b></span>
+          </div>
+        </div>
+      </div>
+      <!-- Row 2 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex-shrink:0;">
+        <div class="card card-corner">
+          <div class="card-title">弃电率</div>
+          <div style="font-size:22px;font-weight:800;color:#f5a623;text-shadow:0 0 10px rgba(245,166,35,0.4);">${MOCK.greenToken.curtailRate}<span style="font-size:11px;color:var(--dim);margin-left:2px;">%</span></div>
+          <div style="height:52px;margin-top:4px;" id="chart-gt-curtail"></div>
+        </div>
+        <div class="card card-corner">
+          <div class="card-title">绿电占比</div>
+          <div style="font-size:22px;font-weight:800;color:var(--green);text-shadow:0 0 10px rgba(0,255,157,0.4);">${greenPct}<span style="font-size:11px;color:var(--dim);margin-left:2px;">%</span></div>
+          <div style="margin:5px 0 4px;background:rgba(0,255,157,0.1);border-radius:3px;height:6px;overflow:hidden;">
+            <div style="width:${greenPct}%;height:100%;background:linear-gradient(90deg,var(--green),var(--teal));border-radius:3px;"></div>
+          </div>
+          <div style="font-size:10px;color:var(--dim);margin-top:3px;text-align:right;">目标 <b style="color:var(--green);">100%</b></div>
+        </div>
+      </div>
+      <!-- Row 3: full-width token energy -->
+      <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div class="card-title" style="margin-bottom:0;">单位Token电耗</div>
+          <div style="display:flex;gap:4px;">
+            ${['24h','7d','30d'].map(r=>`<button onclick="gtTimeRange='${r}';renderPage();" style="padding:2px 7px;font-size:10px;border-radius:3px;border:1px solid ${gtTimeRange===r?'var(--teal)':'rgba(45,224,192,0.2)'};background:${gtTimeRange===r?'rgba(45,224,192,0.15)':'transparent'};color:${gtTimeRange===r?'var(--teal)':'var(--dim)'};cursor:pointer;">${r}</button>`).join('')}
+          </div>
+        </div>
+        <div style="font-size:20px;font-weight:800;color:var(--teal);">${MOCK.greenToken.tokenEnergy} <span style="font-size:10px;color:var(--dim);">kWh / 百万Token</span></div>
+        <div style="flex:1;min-height:80px;" id="chart-gt-token"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderCarbon(){
+  return `<div class="page active">
+    <div class="panel-center">
+      <div class="scene-3d">
+        <div class="scene-label"><b>碳管理</b> Token生产过程碳排强度 · 各环节热力标注</div>
+        <canvas id="canvas-carbon"></canvas>
+        <div style="position:absolute;bottom:36px;left:14px;z-index:5;font-size:11px;color:var(--dim);line-height:1.9;background:rgba(4,10,20,0.7);padding:8px 12px;border-radius:6px;border:1px solid rgba(245,166,35,0.2);">
+          <div style="color:#f5a623;font-weight:600;margin-bottom:3px;">碳中和路径</div>
+          <div>· 绿电替代 <b style="color:var(--green);">−120 t</b></div>
+          <div>· 储能优化 <b style="color:var(--green);">−80 t</b></div>
+          <div>· 制冷提效 <b style="color:var(--green);">−150 t</b></div>
+          <div>· 碳信用 <b style="color:var(--green);">−30 t</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel-right">
+      <!-- Module 1: 碳盘查 -->
+      <div class="card card-corner">
+        <div class="card-title">碳盘查</div>
+        <div style="font-size:10px;color:var(--dim);margin-bottom:4px;">年度实际碳排放量</div>
+        <div id="chart-carbon-scope" style="height:72px;"></div>
+        <div style="font-size:10px;color:var(--dim);margin:6px 0 4px;">节能减排量</div>
+        <div id="chart-carbon-reduce" style="height:72px;"></div>
+        <div style="font-size:10px;color:var(--dim);margin:6px 0 4px;">碳中和路径</div>
+        <div id="chart-carbon-waterfall" style="height:100px;"></div>
+      </div>
+      <!-- Module 2: 碳总览 -->
+      <div class="card card-corner" style="display:flex;align-items:center;gap:12px;">
+        <div style="flex:0 0 90px;height:90px;" id="chart-carbon-gauge"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11px;color:var(--dim);">碳总览</div>
+          <div style="font-size:22px;font-weight:800;color:var(--green);line-height:1.2;">${MOCK.carbon.totalReduction}<span style="font-size:10px;color:var(--dim);margin-left:3px;">tCO₂e 已中和</span></div>
+          <div style="font-size:10px;color:var(--dim);margin-top:3px;">年度目标 <b style="color:var(--teal);">560 tCO₂e</b></div>
+          <div style="margin-top:6px;height:52px;" id="chart-carbon-baseline"></div>
+        </div>
+      </div>
+      <!-- Module 3: 碳排强度 -->
+      <div class="card card-corner" style="display:flex;flex-direction:column;">
+        <div class="card-title">碳排强度</div>
+        <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px;">
+          <div style="font-size:22px;font-weight:800;color:#f5a623;">${MOCK.carbon.intensity}</div>
+          <div style="font-size:11px;color:var(--dim);">kgCO₂e / 百万Token</div>
+        </div>
+        <div style="flex:1;min-height:60px;" id="chart-carbon-intensity"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderPrediction(){
+  return `<div class="page active">
+    <div class="panel-center">
+      <div class="scene-3d">
+        <div class="scene-label"><b>多维预测</b> 天机预测优化大脑 · 感知节点信息汇聚</div>
+        <canvas id="canvas-prediction"></canvas>
+        <div style="position:absolute;top:0;left:0;width:190px;height:100%;padding:10px;display:flex;flex-direction:column;gap:6px;z-index:5;pointer-events:none;">
+          ${[
+            ['天气预测','较EC IFS-HRES提升30%','#33d1ff','正常'],
+            ['功率预测','精度 85%~95%','#00ff9d','正常'],
+            ['负荷预测','精度 97%~98%','#2de0c0','正常'],
+            ['任务预测','算力负载预判','#a882ff','正常'],
+          ].map(([name,acc,color,state])=>`
+            <div style="background:rgba(4,10,20,0.72);border:1px solid ${color}33;border-left:2px solid ${color};border-radius:4px;padding:5px 8px;">
+              <div style="display:flex;align-items:center;gap:5px;">
+                <span style="width:6px;height:6px;border-radius:50%;background:${color};box-shadow:0 0 5px ${color};flex-shrink:0;"></span>
+                <span style="font-size:11px;font-weight:600;color:${color};">${name}</span>
+                <span style="font-size:10px;color:#5f7385;margin-left:auto;">${state}</span>
+              </div>
+              <div style="font-size:10px;color:#5f7385;margin-top:2px;">${acc}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div style="width:380px;min-width:380px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px;height:100%;">
+      <div class="card card-corner" style="display:flex;flex-direction:column;">
+        <div class="card-title">天气预测</div>
+        <div style="flex:1;min-height:0;" id="chart-pred-weather"></div>
+      </div>
+      <div class="card card-corner" style="display:flex;flex-direction:column;">
+        <div class="card-title">功率预测</div>
+        <div style="flex:1;min-height:0;" id="chart-pred-power"></div>
+      </div>
+      <div class="card card-corner" style="display:flex;flex-direction:column;">
+        <div class="card-title">负荷预测</div>
+        <div style="flex:1;min-height:0;" id="chart-pred-load"></div>
+      </div>
+      <div class="card card-corner" style="display:flex;flex-direction:column;">
+        <div class="card-title">任务预测</div>
+        <div style="flex:1;min-height:0;" id="chart-pred-task"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderAIPower(){
+  const s=AI_SUB_TABS.map(t=>`<button class="sub-tab-btn${t.id===currentSubTab?' active':''}" data-subtab="${t.id}">${t.name}</button>`).join('');
+  return `<div class="page active" style="flex-direction:column;">
+    <div class="sub-tabs">${s}</div>
+    <div style="flex:1;display:flex;overflow:hidden;" id="ai-sub-content"></div>
+  </div>`;
+}
+
+function renderAgent(){
+  const h24=Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
+  const sparkOpts=(data,color)=>`<div style="height:38px;margin-top:3px;" id="spark-${color.replace('#','')}-${Math.random().toString(36).slice(2,6)}"></div>`;
+  return `<div class="page active">
+    <div class="panel-left">
+      <div class="card card-corner" style="flex:1;overflow-y:auto;">
+        <div class="card-title">智能体状态卡片</div>
+
+        <!-- 卡片1: 监盘智能体 -->
+        <div style="background:rgba(0,255,157,0.05);border:1px solid rgba(0,255,157,0.2);border-radius:6px;padding:8px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span style="width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);flex-shrink:0;"></span>
+            <span style="font-size:12px;font-weight:600;color:var(--green);">监盘智能体</span>
+            <span style="font-size:10px;color:#5f7385;margin-left:auto;">监控中</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+            <div style="background:rgba(45,224,192,0.05);border:1px solid rgba(45,224,192,0.12);border-radius:4px;padding:5px 7px;">
+              <div style="font-size:9px;color:#5f7385;">风机+储能出力</div>
+              <div style="font-size:15px;font-weight:700;color:var(--teal);">58.1<span style="font-size:9px;color:#5f7385;"> MW</span></div>
+            </div>
+            <div style="background:rgba(45,224,192,0.05);border:1px solid rgba(45,224,192,0.12);border-radius:4px;padding:5px 7px;">
+              <div style="font-size:9px;color:#5f7385;">利用小时数</div>
+              <div style="font-size:15px;font-weight:700;color:var(--teal);">2,847<span style="font-size:9px;color:#5f7385;"> h</span></div>
+            </div>
+            <div style="background:rgba(45,224,192,0.05);border:1px solid rgba(45,224,192,0.12);border-radius:4px;padding:5px 7px;">
+              <div style="font-size:9px;color:#5f7385;">园区当前负荷</div>
+              <div style="font-size:15px;font-weight:700;color:var(--teal);">92.3<span style="font-size:9px;color:#5f7385;"> MW</span></div>
+            </div>
+            <div style="background:rgba(45,224,192,0.05);border:1px solid rgba(45,224,192,0.12);border-radius:4px;padding:5px 7px;">
+              <div style="font-size:9px;color:#5f7385;">当前告警数</div>
+              <div style="font-size:15px;font-weight:700;color:var(--green);">0<span style="font-size:9px;color:#5f7385;"> 条</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 卡片2: 预警智能体 -->
+        <div style="background:rgba(245,166,35,0.05);border:1px solid rgba(245,166,35,0.2);border-radius:6px;padding:8px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span style="width:7px;height:7px;border-radius:50%;background:#f5a623;box-shadow:0 0 6px #f5a623;flex-shrink:0;animation:blink 1.5s infinite;"></span>
+            <span style="font-size:12px;font-weight:600;color:#f5a623;">预警智能体</span>
+            <span style="font-size:10px;color:#f5a623;margin-left:auto;">预警中</span>
+          </div>
+          <div id="agent-warning-content">
+            <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px;">
+              <span style="color:#5f7385;">监控设备</span>
+              <span style="color:#f5a623;font-weight:600;" id="warn-device">风机 #3</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:5px;">
+              <div style="text-align:center;background:rgba(245,166,35,0.06);border:1px solid rgba(245,166,35,0.15);border-radius:3px;padding:3px;">
+                <div style="font-size:8px;color:#5f7385;">测点</div>
+                <div style="font-size:9px;color:#c5d3e0;font-weight:600;" id="warn-point">前轴承温度</div>
+              </div>
+              <div style="text-align:center;background:rgba(245,166,35,0.06);border:1px solid rgba(245,166,35,0.15);border-radius:3px;padding:3px;">
+                <div style="font-size:8px;color:#5f7385;">预测值</div>
+                <div style="font-size:11px;color:var(--teal);font-weight:600;" id="warn-pred">63.2°C</div>
+              </div>
+              <div style="text-align:center;background:rgba(245,166,35,0.06);border:1px solid rgba(245,166,35,0.2);border-radius:3px;padding:3px;">
+                <div style="font-size:8px;color:#5f7385;">实测值</div>
+                <div style="font-size:11px;color:#f5a623;font-weight:700;" id="warn-actual">72.8°C</div>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+              <span style="font-size:9px;color:#5f7385;">偏差</span>
+              <span style="font-size:11px;font-weight:700;color:#ff8f7a;" id="warn-diff">+9.6°C ▲</span>
+              <span style="font-size:9px;padding:1px 6px;background:rgba(255,100,80,0.15);border:1px solid rgba(255,100,80,0.4);border-radius:3px;color:#ff8f7a;">高风险</span>
+            </div>
+            <div style="font-size:9px;color:#5f7385;margin-bottom:2px;">残差趋势（近24h）↗ 持续增长</div>
+            <div style="height:28px;background:rgba(245,166,35,0.06);border-radius:3px;overflow:hidden;" id="chart-warn-trend"></div>
+            <div style="font-size:9px;color:#5f7385;margin-top:4px;text-align:right;">预计风险窗口: <span style="color:#f5a623;">约 48h</span></div>
+          </div>
+          <div style="font-size:9px;color:#5f7385;text-align:right;margin-top:3px;">5s后切换下一设备 →</div>
+        </div>
+
+        <!-- 卡片3: 预测智能体 -->
+        <div style="background:rgba(51,209,255,0.05);border:1px solid rgba(51,209,255,0.2);border-radius:6px;padding:8px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span style="width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan);flex-shrink:0;"></span>
+            <span style="font-size:12px;font-weight:600;color:var(--cyan);">预测智能体</span>
+            <span style="font-size:10px;color:#5f7385;margin-left:auto;">预测中</span>
+          </div>
+          <div style="height:52px;" id="chart-agent-pred-combined"></div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:9px;">
+            <span style="color:#5f7385;">供需缺口</span>
+            <span style="color:var(--green);font-weight:600;">+8.4 MW 盈余</span>
+            <span style="color:#5f7385;">置信度</span>
+            <span style="color:var(--teal);font-weight:600;">92.3%</span>
+          </div>
+        </div>
+
+        <!-- 卡片4: 调度智能体 -->
+        <div style="background:rgba(168,130,255,0.05);border:1px solid rgba(168,130,255,0.2);border-radius:6px;padding:8px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span style="width:7px;height:7px;border-radius:50%;background:var(--purple);box-shadow:0 0 6px var(--purple);flex-shrink:0;"></span>
+            <span style="font-size:12px;font-weight:600;color:var(--purple);">调度智能体</span>
+            <span style="font-size:10px;color:var(--cyan);margin-left:auto;">调度中</span>
+          </div>
+          <div style="font-size:10px;color:var(--teal);font-weight:600;margin-bottom:4px;">当前策略：储能需求响应</div>
+          <div style="height:40px;" id="chart-agent-dispatch-mini"></div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:9px;">
+            <span style="color:#5f7385;">最近指令</span>
+            <span style="color:#c5d3e0;">14:32:05</span>
+            <span style="color:#5f7385;">执行状态</span>
+            <span style="color:var(--green);font-weight:600;">● 执行中</span>
+          </div>
+        </div>
+
+        <!-- 卡片5: 复盘分析智能体 -->
+        <div style="background:rgba(255,143,122,0.05);border:1px solid rgba(255,143,122,0.2);border-radius:6px;padding:8px;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span style="width:7px;height:7px;border-radius:50%;background:#ff8f7a;box-shadow:0 0 6px #ff8f7a;flex-shrink:0;"></span>
+            <span style="font-size:12px;font-weight:600;color:#ff8f7a;">复盘分析智能体</span>
+            <span style="font-size:10px;color:#5f7385;margin-left:auto;">复盘中</span>
+          </div>
+          <div style="height:40px;" id="chart-agent-review-mini"></div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:9px;">
+            <span style="color:#5f7385;">偏差率</span>
+            <span style="color:var(--green);font-weight:600;">3.2% ↓</span>
+            <span style="color:#5f7385;">待处理建议</span>
+            <span style="color:#f5a623;font-weight:600;">2 条</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel-center"><div class="scene-3d"><div class="scene-label"><b>智能体运营</b> 天枢协同控制大脑</div><canvas id="canvas-agent"></canvas></div></div>
+    <div class="panel-right">
+      <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;">
+        <div class="card-title">多 Agent 协同工作流</div>
+        <div style="flex:1;min-height:0;" id="chart-agent-flow"></div>
+      </div>
+      <div class="card card-corner">
+        <div class="card-title">调度智能体 — 策略执行偏差</div>
+        <div style="height:120px;" id="chart-agent-dispatch"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ---------- AI POWER SUB PAGES ----------
+function renderAISubPage(){
+  const c=document.getElementById('ai-sub-content');if(!c)return;
+  const R={'ai-main':renderAIMain,'ai-source':renderAISource,'ai-storage':renderAIStorage,'ai-supply':renderAISupply,'ai-it':renderAIIT,'ai-cooling':renderAICooling};
+  c.innerHTML=R[currentSubTab]();
+  setTimeout(()=>initCharts(),80);
+}
+function renderAIMain(){
+  const strategies=[
+    {id:'ai-source',label:'① 源侧秒级响应负荷变化',desc:'风机变桨调整出力，满足最大负荷需求',color:C.green},
+    {id:'ai-storage',label:'② 储能实时需求响应',desc:'储能协同出力补足风电功率缺口',color:C.cyan},
+    {id:'ai-supply',label:'③ 供电侧响应（SST配储）',desc:'SST+储能削峰填谷，构建电网友好型负载',color:C.gold},
+    {id:'ai-it',label:'④ IT侧响应',desc:'算力任务根据绿电供给动态编排',color:C.purple},
+    {id:'ai-cooling',label:'⑤ 制冷侧响应',desc:'冷却系统随IT负荷主动预判调节',color:C.red},
+  ];
+  return `<div class="panel-left">
+    <div class="card card-corner"><div class="card-title">5种典型策略</div>
+      ${strategies.map(s=>`
+      <div class="strat-item" onclick="currentSubTab='${s.id}';document.querySelectorAll('.sub-tab-btn').forEach(b=>{b.classList.toggle('active',b.dataset.subtab==='${s.id}')});renderAISubPage();"
+        style="background:${s.color}10;border-left:2px solid ${s.color};margin-bottom:4px;cursor:pointer;">
+        <div style="font-size:12px;color:${s.color};font-weight:600;">${s.label}</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:1px;">${s.desc}</div>
+      </div>`).join('')}
+    </div>
+    <div class="card card-corner"><div class="card-title">系统架构</div>
+      <div style="font-size:11px;line-height:1.8;">
+        <div style="text-align:center;color:var(--teal);font-weight:600;border:1px solid var(--teal);border-radius:4px;padding:3px 6px;margin-bottom:6px;">AI 电力系统</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+          <div style="border:1px solid rgba(51,209,255,0.3);border-radius:3px;padding:3px 5px;font-size:10px;color:var(--cyan);">电源协调控制</div>
+          <div style="border:1px solid rgba(0,255,157,0.3);border-radius:3px;padding:3px 5px;font-size:10px;color:var(--green);">多维预测系统</div>
+        </div>
+        <div style="text-align:center;color:var(--dim);font-size:10px;margin:3px 0;">↓ 协同调度 ↓</div>
+        <div style="border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:3px 5px;font-size:10px;color:#f5a623;text-align:center;">智算运维系统 DCIM</div>
+      </div>
+    </div>
+  </div>
+  <div class="panel-center"><div class="scene-3d"><div class="scene-label"><b>AI电力系统</b> 三大子系统拓扑</div><canvas id="canvas-ai-main"></canvas></div></div>
+  <div class="panel-right">
+    <div class="card card-corner" style="display:flex;flex-direction:column;flex:1;">
+      <div class="card-title">典型风储荷趋势</div>
+      <div style="flex:1;min-height:0;" id="chart-ai-trend"></div>
+    </div>
+    <div class="card card-corner">
+      <div class="card-title">实时功率平衡</div>
+      <div class="metric-grid">
+        <div class="metric-item"><div class="metric-value" style="color:var(--green);">45.6</div><div class="metric-label">风电 MW</div></div>
+        <div class="metric-item"><div class="metric-value" style="color:var(--cyan);">15.3</div><div class="metric-label">储能 MW</div></div>
+        <div class="metric-item"><div class="metric-value" style="color:#ff8f7a;">90.2</div><div class="metric-label">负荷 MW</div></div>
+      </div>
+    </div>
+  </div>`;
+}
+function renderAISource(){
+  return `<div class="panel-left"><div class="card card-corner"><div class="card-title">电源实时响应</div>
+    <div class="info-list"><div><span class="k">响应模式</span><span class="v" style="color:var(--green);">源荷互动</span></div>
+    <div><span class="k">风机状态</span><span class="v" style="color:var(--green);">变桨调节中</span></div>
+    <div><span class="k">可用容量</span><span class="v">52.3 MW</span></div>
+    <div><span class="k">当前出力</span><span class="v">45.6 MW</span></div>
+    <div><span class="k">负荷需求</span><span class="v" style="color:#f5a623;">48.2 MW</span></div>
+    <div><span class="k">响应速度</span><span class="v" style="color:var(--green);">&lt; 1s</span></div></div>
+  </div></div>
+  <div class="panel-center"><div class="scene-3d"><div class="scene-label"><b>源侧响应</b> 风机变桨出力调整</div><canvas id="canvas-ai-source"></canvas></div></div>
+  <div class="panel-right" style="display:flex;flex-direction:column;gap:6px;">
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;"><div class="card-title">风机出力曲线</div><div style="flex:1;min-height:0;" id="chart-ai-source-wind"></div></div>
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;"><div class="card-title">算力任务量曲线</div><div style="flex:1;min-height:0;" id="chart-ai-source-task"></div></div>
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;"><div class="card-title">储能出力曲线</div><div style="flex:1;min-height:0;" id="chart-ai-source-storage"></div></div>
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;"><div class="card-title">园区负荷曲线</div><div style="flex:1;min-height:0;" id="chart-ai-source-load"></div></div>
+  </div>`;
+}
+function renderAIStorage(){
+  return `<div class="panel-left"><div class="card card-corner"><div class="card-title">储能实时响应</div>
+    <div class="info-list"><div><span class="k">响应模式</span><span class="v" style="color:var(--green);">功率补足</span></div>
+    <div><span class="k">储能SOC</span><span class="v">78%</span></div>
+    <div><span class="k">当前充放</span><span class="v" style="color:var(--green);">放电 12.5MW</span></div>
+    <div><span class="k">剩余容量</span><span class="v">156 MWh</span></div>
+    <div><span class="k">响应延迟</span><span class="v" style="color:var(--green);">&lt; 200ms</span></div></div>
+  </div></div>
+  <div class="panel-center"><div class="scene-3d"><div class="scene-label"><b>储能响应</b> 储能出力补位</div><canvas id="canvas-ai-storage"></canvas></div></div>
+  <div class="panel-right" style="display:flex;flex-direction:column;gap:6px;">
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;"><div class="card-title">风机出力曲线</div><div style="flex:1;min-height:0;" id="chart-ai-storage-wind"></div></div>
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;"><div class="card-title">算力任务量曲线</div><div style="flex:1;min-height:0;" id="chart-ai-storage-task"></div></div>
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;"><div class="card-title">储能出力曲线</div><div style="flex:1;min-height:0;" id="chart-ai-storage-power"></div></div>
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;"><div class="card-title">园区负荷曲线</div><div style="flex:1;min-height:0;" id="chart-ai-storage-load"></div></div>
+  </div>`;
+}
+function renderAISupply(){
+  return `<div class="panel-left"><div class="card card-corner"><div class="card-title">SST高可靠供电</div>
+    <div class="info-list"><div><span class="k">系统可用性</span><span class="v" style="color:var(--green);">99.999%</span></div>
+    <div><span class="k">动态响应</span><span class="v">百μs级</span></div>
+    <div><span class="k">潮流方向</span><span class="v" style="color:var(--green);">双向可控</span></div>
+    <div><span class="k">工作模式</span><span class="v" style="color:#f5a623;">联合供电</span></div>
+    <div><span class="k">功率缓冲</span><span class="v">分钟级</span></div></div>
+  </div></div>
+  <div class="panel-center"><div class="scene-3d"><div class="scene-label"><b>供电侧</b> SST+储能功率调节</div><canvas id="canvas-ai-supply"></canvas></div></div>
+  <div class="panel-right" style="display:flex;flex-direction:column;gap:6px;">
+    <div class="card card-corner" style="flex:2;display:flex;flex-direction:column;">
+      <div class="card-title">功率曲线（网侧 / IT无SST / IT有SST）</div>
+      <div style="flex:1;min-height:0;" id="chart-ai-supply-power"></div>
+    </div>
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;">
+      <div class="card-title">储能充放电（SST配储）</div>
+      <div style="flex:1;min-height:0;" id="chart-ai-supply-battery"></div>
+    </div>
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;">
+      <div class="card-title">IT 产出率曲线</div>
+      <div style="flex:1;min-height:0;" id="chart-ai-supply-output"></div>
+    </div>
+  </div>`;
+}
+function renderAIIT(){
+  return `<div class="panel-left"><div class="card card-corner"><div class="card-title">IT侧响应</div>
+    <div style="font-size:12px;color:var(--dim);line-height:1.9;">
+      <div style="color:var(--cyan);font-weight:600;">CBU（超容单元）</div>
+      <div>· 平滑GPU快速功率波动</div><div>· 功率响应 <b style="color:var(--green);">&lt;500μs</b></div>
+      <div style="color:var(--cyan);font-weight:600;margin-top:8px;">BBU（锂电单元）</div>
+      <div>· 保障IT可靠供电</div><div>· 持续输出稳定功率 <b style="color:var(--green);">&gt;90μs</b></div>
+      <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <div style="background:rgba(45,224,192,0.06);border:1px solid rgba(45,224,192,0.15);border-radius:4px;padding:5px 7px;">
+          <div style="font-size:10px;color:var(--dim);">集群A负载</div>
+          <div style="font-size:16px;font-weight:700;color:var(--teal);">92%</div>
+        </div>
+        <div style="background:rgba(45,224,192,0.06);border:1px solid rgba(45,224,192,0.15);border-radius:4px;padding:5px 7px;">
+          <div style="font-size:10px;color:var(--dim);">集群B负载</div>
+          <div style="font-size:16px;font-weight:700;color:var(--teal);">78%</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;">任务调度：<span style="color:var(--green);">时空迁移中</span></div>
+    </div>
+  </div></div>
+  <div class="panel-center"><div class="scene-3d"><div class="scene-label"><b>IT侧响应</b> 算力任务时空迁移</div><canvas id="canvas-ai-it"></canvas></div></div>
+  <div class="panel-right" style="display:flex;flex-direction:column;gap:8px;">
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;">
+      <div class="card-title">集群A — 发电功率 &amp; 任务量</div>
+      <div style="flex:1;min-height:0;" id="chart-ai-it-clusterA"></div>
+    </div>
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;">
+      <div class="card-title">集群B — 发电功率 &amp; 任务量</div>
+      <div style="flex:1;min-height:0;" id="chart-ai-it-clusterB"></div>
+    </div>
+  </div>`;
+}
+function renderAICooling(){
+  return `<div class="panel-left"><div class="card card-corner"><div class="card-title">制冷侧响应指标</div>
+    <div class="info-list"><div><span class="k">响应模式</span><span class="v" style="color:var(--green);">主动预判</span></div>
+    <div><span class="k">PUE</span><span class="v" style="color:var(--green);">≤ 1.15</span></div>
+    <div><span class="k">故障识别率提升</span><span class="v">30%</span></div>
+    <div><span class="k">液冷覆盖率</span><span class="v">95%</span></div>
+    <div><span class="k">CDU状态</span><span class="v" style="color:var(--green);">正常</span></div>
+    <div><span class="k">干冷器状态</span><span class="v" style="color:var(--green);">正常</span></div>
+    <div><span class="k">液冷功率</span><span class="v">28.4 kW</span></div>
+    <div><span class="k">风冷功率</span><span class="v">12.1 kW</span></div></div>
+  </div></div>
+  <div class="panel-center"><div class="scene-3d"><div class="scene-label"><b>制冷侧</b> 制冷功率阶跃调节</div><canvas id="canvas-ai-cooling"></canvas></div></div>
+  <div class="panel-right" style="display:flex;flex-direction:column;gap:6px;">
+    <div class="card card-corner" style="flex:2;display:flex;flex-direction:column;">
+      <div class="card-title">运行功率曲线（IT/网侧/制冷/SST储能/环境温度）</div>
+      <div style="flex:1;min-height:0;" id="chart-ai-cooling-power"></div>
+    </div>
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;">
+      <div class="card-title">制冷蓄冷/释冷（正值=释冷，负值=蓄冷）</div>
+      <div style="flex:1;min-height:0;" id="chart-ai-cooling-cold"></div>
+    </div>
+    <div class="card card-corner" style="flex:1;display:flex;flex-direction:column;">
+      <div class="card-title">IT 产出率趋势</div>
+      <div style="flex:1;min-height:0;" id="chart-ai-cooling-output"></div>
+    </div>
+  </div>`;
+}
+
+// ============ CHARTS ============
+const hours=Array.from({length:24},(_,i)=>i+':00');
+const C={teal:'#2de0c0',cyan:'#33d1ff',green:'#00ff9d',gold:'#f5a623',red:'#ff8f7a',purple:'#a882ff',gray:'#5f7385'};
+function area(color){return {type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:color+'55'},{offset:1,color:color+'00'}]};}
+function theme(o={}){return Object.assign({backgroundColor:'transparent',tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:11}},grid:{top:26,right:12,bottom:22,left:38},legend:{textStyle:{color:'#7d93a4',fontSize:10},top:0,itemWidth:12,itemHeight:8},xAxis:{type:'category',data:hours,boundaryGap:false,axisLine:{lineStyle:{color:'rgba(45,224,192,0.15)'}},axisLabel:{color:'#5f7385',fontSize:9,interval:3},axisTick:{show:false}},yAxis:{type:'value',splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:9}}},o);}
+function mk(el,series,o={}){if(!document.getElementById(el))return;const c=echarts.init(document.getElementById(el));c.setOption(Object.assign(theme(o),{series}));charts[el]=c;}
+function line(name,data,color,fill=false){return {name,type:'line',smooth:true,symbol:'none',data,lineStyle:{color,width:2},itemStyle:{color},areaStyle:fill?{color:area(color)}:undefined};}
+
+function initCharts(){
+  Object.values(charts).forEach(c=>{try{c.dispose();}catch(e){}});charts={};
+  ({overview:initOverviewCharts,'green-token':initGreenTokenCharts,carbon:initCarbonCharts,prediction:initPredictionCharts,'ai-power':initAIPowerCharts,agent:initAgentCharts}[currentTab]||(()=>{}))();
+  initCanvasScenes();
+}
+
+function initOverviewCharts(){
+  const h24=Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
+  const xNm={nameLocation:'start',nameRotate:90,nameGap:28,nameTextStyle:{color:'#5f7385',fontSize:9,align:'right',verticalAlign:'bottom'}};
+  // Card 1: IT Load (2 curves)
+  const itAI=Array.from({length:24},(_,i)=>Math.round(120+Math.sin(i/4)*30+Math.random()*10));
+  const itBase=itAI.map(v=>Math.round(v*0.82-Math.random()*5));
+  if(document.getElementById('chart-ov-itload')){const c=echarts.init(document.getElementById('chart-ov-itload'));c.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:11}},legend:{data:['AI\u8c03\u5ea6\u540e','\u57fa\u51c6'],top:0,textStyle:{color:'#7d93a4',fontSize:10},itemWidth:12,itemHeight:8},grid:{top:28,right:10,bottom:22,left:50},xAxis:{type:'category',data:h24,name:'\u65f6\u95f4(h)',...xNm,boundaryGap:false,axisLine:{lineStyle:{color:'rgba(45,224,192,0.15)'}},axisLabel:{color:'#5f7385',fontSize:9,interval:1,formatter:v=>Number(v)%2===0?v:''},axisTick:{show:false}},yAxis:{type:'value',name:'\u529f\u7387(MW)',nameTextStyle:{color:'#5f7385',fontSize:9},splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:9}},series:[{name:'AI\u8c03\u5ea6\u540e',type:'line',smooth:true,symbol:'none',data:itAI,lineStyle:{color:C.green,width:2},itemStyle:{color:C.green},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(0,255,157,0.3)'},{offset:1,color:'rgba(0,255,157,0)'}]}}},{name:'\u57fa\u51c6',type:'line',smooth:true,symbol:'none',data:itBase,lineStyle:{color:C.cyan,width:1.5},itemStyle:{color:C.cyan}}]});charts['chart-ov-itload']=c;}
+  // Card 2: Token Energy (30-day bar + marklines)
+  const d30=Array.from({length:30},(_,i)=>String(i+1));
+  const tokenBars=Array.from({length:30},()=>+(0.9+Math.random()*0.55).toFixed(2));
+  if(document.getElementById('chart-ov-token')){const c=echarts.init(document.getElementById('chart-ov-token'));c.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:11}},grid:{top:20,right:10,bottom:22,left:50},xAxis:{type:'category',data:d30,name:'\u65e5\u671f',...xNm,axisLine:{lineStyle:{color:'rgba(45,224,192,0.15)'}},axisLabel:{color:'#5f7385',fontSize:9,interval:1,formatter:v=>Number(v)%2===0?v:''},axisTick:{show:false}},yAxis:{type:'value',name:'kWh/\u767e\u4e07Token',nameTextStyle:{color:'#5f7385',fontSize:9},min:0,max:2,splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:9}},series:[{type:'bar',data:tokenBars,barWidth:'55%',itemStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:C.cyan},{offset:1,color:'rgba(51,209,255,0.15)'}]},borderRadius:[2,2,0,0]},markLine:{symbol:'none',lineStyle:{width:1.5},data:[{yAxis:1.5,lineStyle:{color:'#ff6b6b',type:'dashed'},label:{formatter:'\u884c\u4e1a\u5e73\u5747',color:'#ff6b6b',fontSize:9,position:'insideEndTop'}},{yAxis:1.0,lineStyle:{color:C.green,type:'dashed'},label:{formatter:'\u4f18\u5316\u76ee\u6807',color:C.green,fontSize:9,position:'insideEndTop'}}]}}]});charts['chart-ov-token']=c;}
+  // Card 3: Green Ratio (12-month area)
+  const m12=['01\u6708','02\u6708','03\u6708','04\u6708','05\u6708','06\u6708','07\u6708','08\u6708','09\u6708','10\u6708','11\u6708','12\u6708'];
+  const greenPct=[72,74,76,78,80,82,84,86,88,85,83,82];
+  if(document.getElementById('chart-ov-green')){const c=echarts.init(document.getElementById('chart-ov-green'));c.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:11}},grid:{top:20,right:10,bottom:22,left:50},xAxis:{type:'category',data:m12,name:'\u6708\u4efd',...xNm,boundaryGap:false,axisLine:{lineStyle:{color:'rgba(45,224,192,0.15)'}},axisLabel:{color:'#5f7385',fontSize:9},axisTick:{show:false}},yAxis:{type:'value',name:'\u7eff\u7535\u5360\u6bd4(%)',nameTextStyle:{color:'#5f7385',fontSize:9},min:0,max:100,splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:9}},series:[{type:'line',smooth:true,symbol:'none',data:greenPct,lineStyle:{color:C.green,width:2},itemStyle:{color:C.green},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(0,255,157,0.35)'},{offset:1,color:'rgba(0,255,157,0)'}]}},markLine:{symbol:'none',lineStyle:{width:1.5},data:[{yAxis:80,lineStyle:{color:C.green,type:'dashed'},label:{formatter:'\u76ee\u6807 \u226580%',color:C.green,fontSize:9,position:'insideEndTop'}}]}}]});charts['chart-ov-green']=c;}
+  // Card 4: PUE (24h line + target)
+  const pueData=Array.from({length:24},(_,i)=>+(1.10+Math.abs(Math.sin(i/4))*0.08+Math.random()*0.03).toFixed(3));
+  if(document.getElementById('chart-ov-pue')){const c=echarts.init(document.getElementById('chart-ov-pue'));c.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:11}},grid:{top:20,right:10,bottom:22,left:50},xAxis:{type:'category',data:h24,name:'\u65f6\u95f4(h)',...xNm,boundaryGap:false,axisLine:{lineStyle:{color:'rgba(45,224,192,0.15)'}},axisLabel:{color:'#5f7385',fontSize:9,interval:1,formatter:v=>Number(v)%2===0?v:''},axisTick:{show:false}},yAxis:{type:'value',name:'PUE',nameTextStyle:{color:'#5f7385',fontSize:9},min:1.0,max:1.3,splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:9,formatter:v=>v.toFixed(2)}},series:[{type:'line',smooth:true,symbol:'none',data:pueData,lineStyle:{color:C.cyan,width:2},itemStyle:{color:C.cyan},markLine:{symbol:'none',lineStyle:{width:1.5},data:[{yAxis:1.15,lineStyle:{color:C.green,type:'dashed'},label:{formatter:'\u76ee\u6807 \u22641.15',color:C.green,fontSize:9,position:'insideEndTop'}}]}}]});charts['chart-ov-pue']=c;}
+}
+function initGreenTokenCharts(){
+  const h24=Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
+  const miniOpts=(xData,name,color)=>({
+    backgroundColor:'transparent',
+    grid:{top:4,right:4,bottom:4,left:4},
+    xAxis:{type:'category',data:xData,show:false},
+    yAxis:{type:'value',show:false},
+    series:[{name,type:'line',smooth:true,symbol:'none',data:MOCK.greenToken.windOutput.slice(0,xData.length),
+      lineStyle:{color,width:1.5},itemStyle:{color},
+      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:color+'44'},{offset:1,color:color+'00'}]}}}],
+    tooltip:{show:false}
+  });
+  // Card 1: wind output mini sparkline
+  if(document.getElementById('chart-gt-wind')){
+    const c=echarts.init(document.getElementById('chart-gt-wind'));
+    c.setOption(miniOpts(h24,'风机出力',C.green));
+    charts['chart-gt-wind']=c;
+  }
+  // Card 3: curtailment rate mini sparkline
+  if(document.getElementById('chart-gt-curtail')){
+    const c=echarts.init(document.getElementById('chart-gt-curtail'));
+    const curtailData=Array.from({length:24},(_,i)=>(4+Math.sin(i/3)*2+Math.random()).toFixed(1));
+    c.setOption({backgroundColor:'transparent',grid:{top:4,right:4,bottom:4,left:4},
+      xAxis:{type:'category',data:h24,show:false},yAxis:{type:'value',show:false,min:0,max:15},
+      series:[{type:'line',smooth:true,symbol:'none',data:curtailData,
+        lineStyle:{color:C.gold,width:1.5},itemStyle:{color:C.gold},
+        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:C.gold+'44'},{offset:1,color:C.gold+'00'}]}},
+        markLine:{symbol:'none',silent:true,lineStyle:{color:'#ff6b6b',type:'dashed',width:1},
+          data:[{yAxis:10,label:{formatter:'目标≤10%',color:'#ff6b6b',fontSize:9,position:'insideEndTop'}}]}}],
+      tooltip:{show:false}});
+    charts['chart-gt-curtail']=c;
+  }
+  // Card 5: token energy bar chart with time range
+  if(document.getElementById('chart-gt-token')){
+    const c=echarts.init(document.getElementById('chart-gt-token'));
+    let xData,barData;
+    if(gtTimeRange==='24h'){
+      xData=Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
+      barData=Array.from({length:24},()=>+(0.9+Math.random()*0.55).toFixed(2));
+    } else if(gtTimeRange==='7d'){
+      xData=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return (d.getMonth()+1)+'/'+(d.getDate());});
+      barData=Array.from({length:7},()=>+(0.9+Math.random()*0.55).toFixed(2));
+    } else {
+      xData=Array.from({length:30},(_,i)=>String(i+1));
+      barData=Array.from({length:30},()=>+(0.9+Math.random()*0.55).toFixed(2));
+    }
+    c.setOption({backgroundColor:'transparent',
+      tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:11}},
+      grid:{top:20,right:10,bottom:22,left:50},
+      xAxis:{type:'category',data:xData,axisLine:{lineStyle:{color:'rgba(45,224,192,0.15)'}},
+        axisLabel:{color:'#5f7385',fontSize:9,interval:gtTimeRange==='30d'?1:0},axisTick:{show:false}},
+      yAxis:{type:'value',name:'kWh/百万Token',nameTextStyle:{color:'#5f7385',fontSize:9},
+        min:0,max:2,splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:9}},
+      series:[{type:'bar',data:barData,barWidth:'60%',
+        itemStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:C.cyan},{offset:1,color:'rgba(51,209,255,0.15)'}]},borderRadius:[2,2,0,0]},
+        markLine:{symbol:'none',lineStyle:{width:1.5},
+          data:[{yAxis:1.5,lineStyle:{color:'#ff6b6b',type:'dashed'},label:{formatter:'行业平均',color:'#ff6b6b',fontSize:9,position:'insideEndTop'}},
+                {yAxis:1.0,lineStyle:{color:C.green,type:'dashed'},label:{formatter:'优化目标',color:C.green,fontSize:9,position:'insideEndTop'}}]}}]});
+    charts['chart-gt-token']=c;
+  }
+}
+function initCarbonCharts(){
+  const months=['01月','02月','03月','04月','05月','06月','07月','08月','09月','10月','11月','12月'];
+  // Module 1a: 年度实际碳排放量 (范围1+范围2堆叠进度条形式用折线)
+  if(document.getElementById('chart-carbon-scope')){
+    const c=echarts.init(document.getElementById('chart-carbon-scope'));
+    c.setOption({backgroundColor:'transparent',
+      grid:{top:8,right:4,bottom:16,left:36},
+      tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:10}},
+      legend:{top:0,right:0,textStyle:{color:'#7d93a4',fontSize:8},itemWidth:8,itemHeight:5},
+      xAxis:{type:'category',data:months,boundaryGap:false,axisLine:{lineStyle:{color:'rgba(45,224,192,0.15)'}},axisLabel:{color:'#5f7385',fontSize:7,interval:2},axisTick:{show:false}},
+      yAxis:{type:'value',name:'tCO₂e',nameTextStyle:{color:'#5f7385',fontSize:7},splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:7}},
+      series:[
+        {name:'范围1(直接)',type:'line',smooth:true,symbol:'none',data:[48,45,42,40,38,36,34,32,30,28,26,24],lineStyle:{color:C.gold,width:1.5},itemStyle:{color:C.gold}},
+        {name:'范围2(间接)',type:'line',smooth:true,symbol:'none',data:[180,175,168,160,155,148,140,135,128,122,118,112],lineStyle:{color:C.cyan,width:1.5},itemStyle:{color:C.cyan}}
+      ]});
+    charts['chart-carbon-scope']=c;
+  }
+  // Module 1b: 节能减排量 (新能源/能效提升/绿证 三分类进度条)
+  if(document.getElementById('chart-carbon-reduce')){
+    const c=echarts.init(document.getElementById('chart-carbon-reduce'));
+    c.setOption({backgroundColor:'transparent',
+      grid:{top:4,right:4,bottom:4,left:4},
+      tooltip:{show:false},
+      xAxis:{type:'value',show:false,max:380},
+      yAxis:{type:'category',data:['新能源','能效提升','绿证'],show:false,inverse:true},
+      series:[
+        {type:'bar',barWidth:10,itemStyle:{color:'rgba(45,224,192,0.08)',borderRadius:5},data:[380,380,380],z:0},
+        {type:'bar',barWidth:10,barGap:'-100%',
+          data:[
+            {value:200,itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:C.green},{offset:1,color:C.teal}]},borderRadius:5}},
+            {value:130,itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:C.cyan},{offset:1,color:C.teal}]},borderRadius:5}},
+            {value:50,itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:C.gold},{offset:1,color:'#f5c842'}]},borderRadius:5}},
+          ],
+          label:{show:true,position:'right',formatter:p=>{const labels=['200 tCO₂e','130 tCO₂e','50 tCO₂e'];return labels[p.dataIndex]||'';},color:'#9fb4c2',fontSize:8},z:1},
+      ]
+    });
+    charts['chart-carbon-reduce']=c;
+    // draw category labels manually via echarts graphic
+  }
+  // Module 1c: 碳中和路径瀑布图
+  if(document.getElementById('chart-carbon-waterfall')){
+    const c=echarts.init(document.getElementById('chart-carbon-waterfall'));
+    c.setOption({backgroundColor:'transparent',
+      tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:10}},
+      grid:{top:10,right:6,bottom:28,left:40},
+      xAxis:{type:'category',data:['基准排放','绿电替代','储能优化','制冷提效','碳信用','净排放'],axisLabel:{color:'#5f7385',fontSize:7,rotate:10},axisLine:{lineStyle:{color:'rgba(45,224,192,0.15)'}}},
+      yAxis:{type:'value',splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:7}},
+      series:[
+        {type:'bar',stack:'a',data:[0,450,330,250,220,0],itemStyle:{color:'transparent'},barWidth:'55%'},
+        {type:'bar',stack:'a',data:[570,0,0,0,0,190],itemStyle:{color:C.gold,borderRadius:[2,2,0,0]},barWidth:'55%',label:{show:true,position:'top',fontSize:7,color:C.gold}},
+        {type:'bar',stack:'a',data:[0,120,80,150,30,0],itemStyle:{color:C.green,borderRadius:[2,2,0,0]},barWidth:'55%',label:{show:true,position:'top',fontSize:7,color:C.green}}
+      ]});
+    charts['chart-carbon-waterfall']=c;
+  }
+  // Module 2: 碳总览环形进度
+  if(document.getElementById('chart-carbon-gauge')){
+    const c=echarts.init(document.getElementById('chart-carbon-gauge'));
+    const pct=Math.round(MOCK.carbon.totalReduction/560*100);
+    c.setOption({backgroundColor:'transparent',
+      series:[{type:'pie',radius:['52%','78%'],center:['50%','50%'],startAngle:90,
+        data:[{value:pct,itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:C.green},{offset:1,color:C.teal}]}}},
+              {value:100-pct,itemStyle:{color:'rgba(45,224,192,0.08)'}}],
+        label:{show:true,position:'center',formatter:pct+'%',color:C.teal,fontSize:13,fontWeight:'bold'},silent:true}]});
+    charts['chart-carbon-gauge']=c;
+  }
+  // Module 2b: 碳排基线分布 (新能源/能效/环境权益 环形)
+  if(document.getElementById('chart-carbon-baseline')){
+    const c=echarts.init(document.getElementById('chart-carbon-baseline'));
+    c.setOption({backgroundColor:'transparent',
+      tooltip:{trigger:'item',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:9},formatter:'{b}: {d}%'},
+      series:[{type:'pie',radius:['35%','65%'],center:['50%','50%'],
+        data:[{value:200,name:'新能源',itemStyle:{color:C.green}},{value:130,name:'能效提升',itemStyle:{color:C.cyan}},{value:50,name:'环境权益',itemStyle:{color:C.gold}}],
+        label:{show:true,fontSize:7,color:'#9fb4c2',formatter:'{b} {d}%'},labelLine:{length:3,length2:3}}]});
+    charts['chart-carbon-baseline']=c;
+  }
+  // Module 3: 碳排强度趋势 (kgCO2e/百万Token柱状图)
+  if(document.getElementById('chart-carbon-intensity')){
+    const c=echarts.init(document.getElementById('chart-carbon-intensity'));
+    const d30=Array.from({length:30},(_,i)=>String(i+1));
+    const intensityBars=Array.from({length:30},()=>+(0.05+Math.random()*0.12).toFixed(3));
+    c.setOption({backgroundColor:'transparent',
+      grid:{top:8,right:4,bottom:18,left:42},
+      tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:10}},
+      xAxis:{type:'category',data:d30,axisLine:{lineStyle:{color:'rgba(45,224,192,0.15)'}},axisLabel:{color:'#5f7385',fontSize:7,interval:4},axisTick:{show:false}},
+      yAxis:{type:'value',name:'kgCO₂e\n/百万Token',nameTextStyle:{color:'#5f7385',fontSize:7,align:'right'},splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:7}},
+      series:[{type:'bar',data:intensityBars,barWidth:'60%',
+        itemStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:C.gold},{offset:1,color:C.gold+'22'}]},borderRadius:[2,2,0,0]},
+        markLine:{symbol:'none',lineStyle:{width:1},data:[
+          {yAxis:0.45,lineStyle:{color:'#ff6b6b',type:'dashed'},label:{formatter:'行业平均~0.45',color:'#ff6b6b',fontSize:7,position:'insideEndTop'}},
+          {yAxis:0.10,lineStyle:{color:C.green,type:'dashed'},label:{formatter:'先进目标≤0.10',color:C.green,fontSize:7,position:'insideEndTop'}}
+        ]}}]});
+    charts['chart-carbon-intensity']=c;
+  }
+}
+function initPredictionCharts(){
+  const h24=Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
+  const baseOpts=(extraOpts={})=>Object.assign({backgroundColor:'transparent',
+    tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:10}},
+    legend:{top:0,textStyle:{color:'#7d93a4',fontSize:9},itemWidth:10,itemHeight:6},
+    grid:{top:22,right:10,bottom:18,left:42},
+    xAxis:{type:'category',data:h24,boundaryGap:false,axisLine:{lineStyle:{color:'rgba(45,224,192,0.15)'}},axisLabel:{color:'#5f7385',fontSize:8,interval:3},axisTick:{show:false}}
+  },extraOpts);
+
+  // 天气预测 — dual Y axis
+  if(document.getElementById('chart-pred-weather')){
+    const c=echarts.init(document.getElementById('chart-pred-weather'));
+    c.setOption(Object.assign(baseOpts(),{
+      grid:{top:22,right:36,bottom:18,left:42},
+      yAxis:[
+        {type:'value',name:'℃',nameTextStyle:{color:'#5f7385',fontSize:8},splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:8}},
+        {type:'value',name:'m/s|%',nameTextStyle:{color:'#5f7385',fontSize:8},splitLine:{show:false},axisLabel:{color:'#5f7385',fontSize:8}}
+      ],
+      series:[
+        {name:'温度',type:'line',smooth:true,symbol:'none',yAxisIndex:0,
+          data:MOCK.prediction.weather.temp.map(v=>v.toFixed(1)),
+          lineStyle:{color:C.red,width:1.5},itemStyle:{color:C.red}},
+        {name:'风速',type:'line',smooth:true,symbol:'none',yAxisIndex:1,
+          data:MOCK.prediction.weather.wind.map(v=>v.toFixed(1)),
+          lineStyle:{color:C.cyan,width:1.5},itemStyle:{color:C.cyan}},
+        {name:'相对湿度',type:'line',smooth:true,symbol:'none',yAxisIndex:1,
+          data:Array.from({length:24},(_,i)=>(60+Math.sin(i/5)*15+Math.random()*5).toFixed(1)),
+          lineStyle:{color:C.gold,width:1.5,type:'dashed'},itemStyle:{color:C.gold}}
+      ]
+    }));
+    charts['chart-pred-weather']=c;
+  }
+
+  // 功率预测 — 预测线 + 实测线 + 置信区间
+  if(document.getElementById('chart-pred-power')){
+    const c=echarts.init(document.getElementById('chart-pred-power'));
+    const pred=MOCK.prediction.power.map(v=>v.toFixed(1));
+    const actual=MOCK.prediction.power.map(v=>(v+Math.random()*4-2).toFixed(1));
+    const upper=MOCK.prediction.power.map(v=>(v+5+Math.random()*2).toFixed(1));
+    const lower=MOCK.prediction.power.map(v=>(v-5-Math.random()*2).toFixed(1));
+    c.setOption(Object.assign(baseOpts(),{
+      yAxis:{type:'value',splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:8},name:'MW',nameTextStyle:{color:'#5f7385',fontSize:8}},
+      series:[
+        {name:'置信上',type:'line',smooth:true,symbol:'none',data:upper,lineStyle:{opacity:0},stack:'conf',areaStyle:{color:'rgba(0,255,157,0.08)'},itemStyle:{color:'transparent'},legendHoverLink:false,tooltip:{show:false}},
+        {name:'置信下',type:'line',smooth:true,symbol:'none',data:lower,lineStyle:{opacity:0},stack:'conf',areaStyle:{color:'rgba(0,255,157,0.08)'},itemStyle:{color:'transparent'},legendHoverLink:false,tooltip:{show:false}},
+        {name:'预测值',type:'line',smooth:true,symbol:'none',data:pred,lineStyle:{color:C.green,width:2},itemStyle:{color:C.green}},
+        {name:'实测值',type:'line',smooth:true,symbol:'none',data:actual,lineStyle:{color:C.gold,type:'dashed',width:1.5},itemStyle:{color:C.gold}}
+      ]
+    }));
+    charts['chart-pred-power']=c;
+  }
+
+  // 负荷预测 — 同功率预测结构
+  if(document.getElementById('chart-pred-load')){
+    const c=echarts.init(document.getElementById('chart-pred-load'));
+    const pred=MOCK.prediction.load.map(v=>v.toFixed(1));
+    const actual=MOCK.prediction.load.map(v=>(v+Math.random()*3-1.5).toFixed(1));
+    const upper=MOCK.prediction.load.map(v=>(v+4+Math.random()).toFixed(1));
+    const lower=MOCK.prediction.load.map(v=>(v-4-Math.random()).toFixed(1));
+    c.setOption(Object.assign(baseOpts(),{
+      yAxis:{type:'value',splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:8},name:'MW',nameTextStyle:{color:'#5f7385',fontSize:8}},
+      series:[
+        {name:'置信上',type:'line',smooth:true,symbol:'none',data:upper,lineStyle:{opacity:0},stack:'conf',areaStyle:{color:'rgba(51,209,255,0.08)'},itemStyle:{color:'transparent'},legendHoverLink:false,tooltip:{show:false}},
+        {name:'置信下',type:'line',smooth:true,symbol:'none',data:lower,lineStyle:{opacity:0},stack:'conf',areaStyle:{color:'rgba(51,209,255,0.08)'},itemStyle:{color:'transparent'},legendHoverLink:false,tooltip:{show:false}},
+        {name:'预测值',type:'line',smooth:true,symbol:'none',data:pred,lineStyle:{color:C.cyan,width:2},itemStyle:{color:C.cyan}},
+        {name:'实测值',type:'line',smooth:true,symbol:'none',data:actual,lineStyle:{color:C.red,type:'dashed',width:1.5},itemStyle:{color:C.red}}
+      ]
+    }));
+    charts['chart-pred-load']=c;
+  }
+
+  // 任务预测 — 单线 + 置信区间
+  if(document.getElementById('chart-pred-task')){
+    const c=echarts.init(document.getElementById('chart-pred-task'));
+    const pred=MOCK.prediction.task.map(v=>v.toFixed(1));
+    const upper=MOCK.prediction.task.map(v=>(v+8+Math.random()*2).toFixed(1));
+    const lower=MOCK.prediction.task.map(v=>(v-8-Math.random()*2).toFixed(1));
+    c.setOption(Object.assign(baseOpts(),{
+      yAxis:{type:'value',name:'TFLOPS',nameTextStyle:{color:'#5f7385',fontSize:8},splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:8}},
+      series:[
+        {name:'置信上',type:'line',smooth:true,symbol:'none',data:upper,lineStyle:{opacity:0},stack:'conf',areaStyle:{color:'rgba(168,130,255,0.1)'},itemStyle:{color:'transparent'},legendHoverLink:false,tooltip:{show:false}},
+        {name:'置信下',type:'line',smooth:true,symbol:'none',data:lower,lineStyle:{opacity:0},stack:'conf',areaStyle:{color:'rgba(168,130,255,0.1)'},itemStyle:{color:'transparent'},legendHoverLink:false,tooltip:{show:false}},
+        {name:'算力任务量',type:'line',smooth:true,symbol:'none',data:pred,lineStyle:{color:C.purple,width:2},itemStyle:{color:C.purple},
+          areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:C.purple+'44'},{offset:1,color:C.purple+'00'}]}}}
+      ]
+    }));
+    charts['chart-pred-task']=c;
+  }
+}
+function initAIPowerCharts(){
+  const h24=Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
+  const miniLine=(el,name,data,color,fill=false)=>{if(!document.getElementById(el))return;
+    const c=echarts.init(document.getElementById(el));
+    c.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:10}},
+      grid:{top:18,right:8,bottom:16,left:40},
+      xAxis:{type:'category',data:h24,boundaryGap:false,axisLine:{lineStyle:{color:'rgba(45,224,192,0.12)'}},axisLabel:{color:'#5f7385',fontSize:7,interval:3},axisTick:{show:false}},
+      yAxis:{type:'value',splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:7}},
+      series:[{name,type:'line',smooth:true,symbol:'none',data,lineStyle:{color,width:1.8},itemStyle:{color},
+        areaStyle:fill?{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:color+'44'},{offset:1,color:color+'00'}]}}:undefined}]
+    });charts[el]=c;};
+
+  if(currentSubTab==='ai-main'){
+    mk('chart-ai-trend',[line('风电',MOCK.aiPower.windCurve.map(v=>v.toFixed(1)),C.green),line('储能',MOCK.aiPower.storageCurve.map(v=>v.toFixed(1)),C.cyan),line('负荷',MOCK.aiPower.loadCurve.map(v=>v.toFixed(1)),C.red),line('SST',MOCK.aiPower.sstCurve.map(v=>v.toFixed(1)),C.gold)]);
+  }
+
+  if(currentSubTab==='ai-source'){
+    // 风机出力: 12点后增大（变桨响应）
+    const wi=MOCK.aiPower.windCurve.map((v,i)=>i>12?(v+8+Math.random()*2).toFixed(1):v.toFixed(1));
+    miniLine('chart-ai-source-wind','风机出力(MW)',wi,C.green,true);
+    // 算力任务量: 随风机出力增加后上升
+    const task=Array.from({length:24},(_,i)=>(60+Math.cos(i/4)*15+(i>12?10:0)+Math.random()*3).toFixed(1));
+    miniLine('chart-ai-source-task','任务量(TFLOPS)',task,C.purple,true);
+    // 储能出力: 配合调峰，轻微波动
+    const sto=MOCK.aiPower.storageCurve.map((v,i)=>(Math.abs(v*0.6)+Math.random()*3).toFixed(1));
+    miniLine('chart-ai-source-storage','储能出力(MW)',sto,C.cyan,true);
+    // 园区负荷: 随绿电供给增加整体抬升
+    const load=MOCK.aiPower.loadCurve.map((v,i)=>i>12?(v+6+Math.random()*2).toFixed(1):v.toFixed(1));
+    miniLine('chart-ai-source-load','园区负荷(MW)',load,C.red,false);
+  }
+
+  if(currentSubTab==='ai-storage'){
+    // 风电: 10点后下降
+    const wd=MOCK.aiPower.windCurve.map((v,i)=>i>10?(v-15+Math.random()*3).toFixed(1):v.toFixed(1));
+    miniLine('chart-ai-storage-wind','风机出力(MW)',wd,C.green,true);
+    // 算力任务量: 保持平稳
+    const task=Array.from({length:24},(_,i)=>(68+Math.sin(i/6)*5+Math.random()*2).toFixed(1));
+    miniLine('chart-ai-storage-task','任务量(TFLOPS)',task,C.purple,true);
+    // 储能出力: 风电不足后升高
+    const su=MOCK.aiPower.storageCurve.map((v,i)=>i>10?(v+18+Math.random()*2).toFixed(1):v.toFixed(1));
+    miniLine('chart-ai-storage-power','储能出力(MW)',su,C.cyan,true);
+    // 负荷: 平稳
+    miniLine('chart-ai-storage-load','园区负荷(MW)',MOCK.aiPower.loadCurve.map(v=>(v*0.95).toFixed(1)),C.red,false);
+  }
+
+  if(currentSubTab==='ai-supply'){
+    // 功率曲线: 网侧/IT无SST/IT有SST 三线对比
+    if(document.getElementById('chart-ai-supply-power')){
+      const c=echarts.init(document.getElementById('chart-ai-supply-power'));
+      const itNoSST=Array.from({length:24},(_,i)=>(90+Math.sin(i/2)*22+Math.random()*5).toFixed(1));
+      const itSST=itNoSST.map(v=>(parseFloat(v)*0.88+Math.random()*2).toFixed(1));
+      const grid=itNoSST.map(v=>(parseFloat(v)*1.05+Math.random()*3).toFixed(1));
+      c.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:10}},
+        legend:{top:0,textStyle:{color:'#7d93a4',fontSize:9},itemWidth:10,itemHeight:6},
+        grid:{top:22,right:8,bottom:16,left:42},
+        xAxis:{type:'category',data:h24,boundaryGap:false,axisLine:{lineStyle:{color:'rgba(45,224,192,0.12)'}},axisLabel:{color:'#5f7385',fontSize:7,interval:3},axisTick:{show:false}},
+        yAxis:{type:'value',name:'MW',nameTextStyle:{color:'#5f7385',fontSize:8},splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:7}},
+        series:[
+          {name:'网侧功率',type:'line',smooth:true,symbol:'none',data:grid,lineStyle:{color:C.gray,width:1.5},itemStyle:{color:C.gray}},
+          {name:'IT侧(无SST)',type:'line',smooth:true,symbol:'none',data:itNoSST,lineStyle:{color:'#ff8f7a',width:1.5,type:'dashed'},itemStyle:{color:'#ff8f7a'}},
+          {name:'IT侧(有SST)',type:'line',smooth:true,symbol:'none',data:itSST,lineStyle:{color:C.cyan,width:2},itemStyle:{color:C.cyan},
+            areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:C.cyan+'33'},{offset:1,color:C.cyan+'00'}]}}}
+        ]});charts['chart-ai-supply-power']=c;
+    }
+    // 储能充放电柱状图（正=放电补峰，负=充电填谷）
+    if(document.getElementById('chart-ai-supply-battery')){
+      const c=echarts.init(document.getElementById('chart-ai-supply-battery'));
+      const battData=Array.from({length:24},(_,i)=>{const v=(Math.sin(i/2)*18+Math.random()*4);return +v.toFixed(1);});
+      c.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:10}},
+        grid:{top:8,right:8,bottom:16,left:42},
+        xAxis:{type:'category',data:h24,axisLine:{lineStyle:{color:'rgba(45,224,192,0.12)'}},axisLabel:{color:'#5f7385',fontSize:7,interval:3},axisTick:{show:false}},
+        yAxis:{type:'value',name:'MW',nameTextStyle:{color:'#5f7385',fontSize:8},splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:7}},
+        series:[{type:'bar',data:battData.map(v=>({value:v,itemStyle:{color:v>=0?C.cyan+'cc':'#f5a623cc',borderRadius:v>=0?[2,2,0,0]:[0,0,2,2]}})),barWidth:'55%'}]
+      });charts['chart-ai-supply-battery']=c;
+    }
+    // IT产出率: 接入SST后向100%逼近
+    miniLine('chart-ai-supply-output','IT产出率(%)',Array.from({length:24},(_,i)=>(86+i*0.35+Math.random()*1.5).toFixed(1)),C.gold,true);
+  }
+
+  if(currentSubTab==='ai-it'){
+    const clusterOpts=(powerColor,taskColor,markAt,powerDrop)=>{
+      const power=Array.from({length:24},(_,i)=>{const base=70+Math.sin(i/3)*20;return (powerDrop&&i>markAt?base*0.65:base)+Math.random()*3;}).map(v=>v.toFixed(1));
+      const task=Array.from({length:24},(_,i)=>{const base=65+Math.cos(i/4)*20;return (powerDrop&&i>markAt?base*0.6:base)+Math.random()*3;}).map(v=>v.toFixed(1));
+      return {backgroundColor:'transparent',
+        tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:10}},
+        legend:{top:0,textStyle:{color:'#7d93a4',fontSize:9},itemWidth:10,itemHeight:6},
+        grid:{top:22,right:8,bottom:16,left:42},
+        xAxis:{type:'category',data:h24,boundaryGap:false,axisLine:{lineStyle:{color:'rgba(45,224,192,0.12)'}},axisLabel:{color:'#5f7385',fontSize:7,interval:3},axisTick:{show:false}},
+        yAxis:{type:'value',splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:7}},
+        series:[
+          {name:'发电功率(MW)',type:'line',smooth:true,symbol:'none',data:power,lineStyle:{color:powerColor,width:1.8},itemStyle:{color:powerColor},
+            markLine:{symbol:'none',data:[{xAxis:String(markAt).padStart(2,'0'),lineStyle:{color:'rgba(255,255,255,0.4)',type:'dashed'},label:{formatter:'任务迁移',color:'#c5d3e0',fontSize:8}}]}},
+          {name:'任务量(TFLOPS)',type:'line',smooth:true,symbol:'none',data:task,lineStyle:{color:taskColor,width:1.8},itemStyle:{color:taskColor},
+            areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:taskColor+'33'},{offset:1,color:taskColor+'00'}]}}}
+        ]};
+    };
+    if(document.getElementById('chart-ai-it-clusterA')){const c=echarts.init(document.getElementById('chart-ai-it-clusterA'));c.setOption(clusterOpts(C.green,C.purple,12,true));charts['chart-ai-it-clusterA']=c;}
+    if(document.getElementById('chart-ai-it-clusterB')){const c=echarts.init(document.getElementById('chart-ai-it-clusterB'));c.setOption(clusterOpts(C.cyan,C.gold,14,false));charts['chart-ai-it-clusterB']=c;}
+  }
+
+  if(currentSubTab==='ai-cooling'){
+    // 运行功率五线图: IT/网侧/制冷/SST储能/环境温度
+    if(document.getElementById('chart-ai-cooling-power')){
+      const c=echarts.init(document.getElementById('chart-ai-cooling-power'));
+      const envTemp=Array.from({length:24},(_,i)=>(28+Math.sin((i-6)/12*Math.PI)*12+Math.random()*2).toFixed(1));
+      c.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:10}},
+        legend:{top:0,textStyle:{color:'#7d93a4',fontSize:8},itemWidth:10,itemHeight:5},
+        grid:{top:22,right:40,bottom:16,left:42},
+        xAxis:{type:'category',data:h24,boundaryGap:false,axisLine:{lineStyle:{color:'rgba(45,224,192,0.12)'}},axisLabel:{color:'#5f7385',fontSize:7,interval:3},axisTick:{show:false}},
+        yAxis:[
+          {type:'value',name:'MW',nameTextStyle:{color:'#5f7385',fontSize:8},splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:7}},
+          {type:'value',name:'℃',nameTextStyle:{color:'#5f7385',fontSize:8},splitLine:{show:false},axisLabel:{color:'#5f7385',fontSize:7}}
+        ],
+        series:[
+          {name:'IT侧',type:'line',smooth:true,symbol:'none',yAxisIndex:0,data:MOCK.aiPower.loadCurve.map(v=>v.toFixed(1)),lineStyle:{color:'#ff8f7a',width:1.8},itemStyle:{color:'#ff8f7a'}},
+          {name:'网侧',type:'line',smooth:true,symbol:'none',yAxisIndex:0,data:MOCK.aiPower.loadCurve.map(v=>(v*1.06).toFixed(1)),lineStyle:{color:C.gray,width:1.5},itemStyle:{color:C.gray}},
+          {name:'制冷',type:'line',smooth:true,symbol:'none',yAxisIndex:0,data:Array.from({length:24},(_,i)=>(14+Math.sin(i/3)*4+Math.random()*1.5).toFixed(1)),lineStyle:{color:C.cyan,width:1.8},itemStyle:{color:C.cyan}},
+          {name:'SST储能',type:'line',smooth:true,symbol:'none',yAxisIndex:0,data:MOCK.aiPower.sstCurve.map(v=>v.toFixed(1)),lineStyle:{color:C.gold,width:1.5},itemStyle:{color:C.gold}},
+          {name:'环境温度',type:'line',smooth:true,symbol:'none',yAxisIndex:1,data:envTemp,lineStyle:{color:'#ffd700',width:1.2,type:'dashed'},itemStyle:{color:'#ffd700'}}
+        ]
+      });charts['chart-ai-cooling-power']=c;
+    }
+    // 蓄冷/释冷柱状图
+    if(document.getElementById('chart-ai-cooling-cold')){
+      const c=echarts.init(document.getElementById('chart-ai-cooling-cold'));
+      const coldData=Array.from({length:24},(_,i)=>{const v=(Math.sin(i/3)*12+Math.random()*3);return +v.toFixed(1);});
+      c.setOption({backgroundColor:'transparent',tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:10},formatter:params=>{const v=params[0].value;return `${params[0].axisValue}h: ${v>=0?'释冷':'蓄冷'} ${Math.abs(v).toFixed(1)} MW`;}},
+        grid:{top:6,right:8,bottom:16,left:42},
+        xAxis:{type:'category',data:h24,axisLine:{lineStyle:{color:'rgba(45,224,192,0.12)'}},axisLabel:{color:'#5f7385',fontSize:7,interval:3},axisTick:{show:false}},
+        yAxis:{type:'value',name:'MW',nameTextStyle:{color:'#5f7385',fontSize:8},splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:7}},
+        series:[{type:'bar',data:coldData.map(v=>({value:v,itemStyle:{color:v>=0?C.cyan+'cc':'#f5a623cc',borderRadius:v>=0?[2,2,0,0]:[0,0,2,2]}})),barWidth:'55%'}]
+      });charts['chart-ai-cooling-cold']=c;
+    }
+    // IT产出率
+    miniLine('chart-ai-cooling-output','IT产出率(%)',Array.from({length:24},(_,i)=>(84+i*0.45+Math.random()*1.5).toFixed(1)),C.green,true);
+  }
+}
+function initAgentCharts(){
+  const h24=Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
+  const miniOpt=(el,data,color,type='line')=>{
+    if(!document.getElementById(el))return;
+    const c=echarts.init(document.getElementById(el));
+    const s=type==='line'?{type:'line',smooth:true,symbol:'none',data,lineStyle:{color,width:1.5},itemStyle:{color},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:color+'44'},{offset:1,color:color+'00'}]}}}
+      :{type:'bar',data,itemStyle:{color},barWidth:'70%'};
+    c.setOption({backgroundColor:'transparent',grid:{top:2,right:2,bottom:2,left:2},xAxis:{type:'category',data:h24,show:false},yAxis:{type:'value',show:false},series:[s],tooltip:{show:false}});
+    charts[el]=c;
+  };
+
+  // 预警趋势sparkline (残差趋势，逐渐上升)
+  miniOpt('chart-warn-trend',Array.from({length:24},(_,i)=>(1+i*0.4+Math.random()*0.5).toFixed(1)),'#f5a623');
+
+  // 预测智能体: 出力+负荷双线
+  if(document.getElementById('chart-agent-pred-combined')){
+    const c=echarts.init(document.getElementById('chart-agent-pred-combined'));
+    c.setOption({backgroundColor:'transparent',grid:{top:2,right:2,bottom:2,left:2},
+      xAxis:{type:'category',data:h24,show:false},yAxis:{type:'value',show:false},
+      series:[
+        {type:'line',smooth:true,symbol:'none',data:MOCK.prediction.power.map(v=>v.toFixed(1)),lineStyle:{color:'#00ff9d',width:1.5},itemStyle:{color:'#00ff9d'},tooltip:{show:false}},
+        {type:'line',smooth:true,symbol:'none',data:MOCK.prediction.load.map(v=>v.toFixed(1)),lineStyle:{color:'#33d1ff',width:1.5,type:'dashed'},itemStyle:{color:'#33d1ff'},tooltip:{show:false}}
+      ],tooltip:{show:false}});charts['chart-agent-pred-combined']=c;
+  }
+
+  // 调度智能体mini: 计划vs实际
+  if(document.getElementById('chart-agent-dispatch-mini')){
+    const c=echarts.init(document.getElementById('chart-agent-dispatch-mini'));
+    const plan=Array.from({length:24},(_,i)=>(60+Math.sin(i/3)*20).toFixed(1));
+    const actual=plan.map(v=>(parseFloat(v)+Math.random()*4-2).toFixed(1));
+    c.setOption({backgroundColor:'transparent',grid:{top:2,right:2,bottom:2,left:2},
+      xAxis:{type:'category',data:h24,show:false},yAxis:{type:'value',show:false},
+      series:[
+        {type:'line',smooth:true,symbol:'none',data:plan,lineStyle:{color:'#a882ff',width:1.5,type:'dashed'},itemStyle:{color:'#a882ff'},tooltip:{show:false}},
+        {type:'line',smooth:true,symbol:'none',data:actual,lineStyle:{color:'#2de0c0',width:1.5},itemStyle:{color:'#2de0c0'},tooltip:{show:false}}
+      ],tooltip:{show:false}});charts['chart-agent-dispatch-mini']=c;
+  }
+
+  // 复盘分析mini: 预测vs实际
+  if(document.getElementById('chart-agent-review-mini')){
+    const c=echarts.init(document.getElementById('chart-agent-review-mini'));
+    const pred=Array.from({length:24},(_,i)=>(70+Math.sin(i/4)*20).toFixed(1));
+    const actual=pred.map(v=>(parseFloat(v)+Math.random()*5-2.5).toFixed(1));
+    c.setOption({backgroundColor:'transparent',grid:{top:2,right:2,bottom:2,left:2},
+      xAxis:{type:'category',data:h24,show:false},yAxis:{type:'value',show:false},
+      series:[
+        {type:'line',smooth:true,symbol:'none',data:pred,lineStyle:{color:'#ff8f7a',width:1.5},itemStyle:{color:'#ff8f7a'},tooltip:{show:false}},
+        {type:'line',smooth:true,symbol:'none',data:actual,lineStyle:{color:'#5f7385',width:1.2,type:'dashed'},itemStyle:{color:'#5f7385'},tooltip:{show:false}}
+      ],tooltip:{show:false}});charts['chart-agent-review-mini']=c;
+  }
+
+  // 右侧: 多Agent协同工作流 (纵向流程节点图)
+  if(document.getElementById('chart-agent-flow')){
+    const c=echarts.init(document.getElementById('chart-agent-flow'));
+    c.setOption({backgroundColor:'transparent',
+      tooltip:{trigger:'item',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:11},
+        formatter:p=>{const descs={监盘:'实时监测设备状态、告警事件，识别异常工况',预警:'基于历史数据识别异常趋势，提前预警故障',预测:'综合风机出力/负荷/AI任务，预测未来供需缺口',调度:'生成储能/SST/制冷/IT负荷协同策略并下发执行',复盘:'对比预测值与实际值，分析偏差，持续优化模型'};return descs[p.name]||p.name;}},
+      series:[{type:'graph',layout:'none',
+        data:[
+          {name:'监盘',x:130,y:30,symbolSize:44,itemStyle:{color:'rgba(0,255,157,0.85)'},label:{show:true,color:'#04121a',fontSize:11,fontWeight:'bold'}},
+          {name:'预警',x:130,y:110,symbolSize:40,itemStyle:{color:'rgba(245,166,35,0.85)'},label:{show:true,color:'#04121a',fontSize:11,fontWeight:'bold'}},
+          {name:'预测',x:130,y:185,symbolSize:42,itemStyle:{color:'rgba(51,209,255,0.85)'},label:{show:true,color:'#04121a',fontSize:11,fontWeight:'bold'}},
+          {name:'调度',x:130,y:260,symbolSize:48,itemStyle:{color:'rgba(168,130,255,0.85)'},label:{show:true,color:'#04121a',fontSize:11,fontWeight:'bold'}},
+          {name:'复盘',x:130,y:335,symbolSize:38,itemStyle:{color:'rgba(255,143,122,0.85)'},label:{show:true,color:'#04121a',fontSize:11,fontWeight:'bold'}},
+        ],
+        links:[
+          {source:'监盘',target:'预警',lineStyle:{color:'rgba(45,224,192,0.5)',width:2}},
+          {source:'预警',target:'预测',lineStyle:{color:'rgba(45,224,192,0.5)',width:2}},
+          {source:'预测',target:'调度',lineStyle:{color:'rgba(45,224,192,0.5)',width:2}},
+          {source:'调度',target:'复盘',lineStyle:{color:'rgba(45,224,192,0.5)',width:2}},
+          {source:'复盘',target:'监盘',lineStyle:{color:'rgba(45,224,192,0.25)',width:1.5,type:'dashed',curveness:0.5}},
+        ],
+        edgeSymbol:['none','arrow'],edgeSymbolSize:8,
+        label:{show:true},
+        lineStyle:{color:'rgba(45,224,192,0.4)',width:2}
+      }]
+    });charts['chart-agent-flow']=c;
+  }
+
+  // 右侧: 策略执行偏差折线
+  if(document.getElementById('chart-agent-dispatch')){
+    const c=echarts.init(document.getElementById('chart-agent-dispatch'));
+    const pred=Array.from({length:24},(_,i)=>(60+Math.sin(i/3)*25).toFixed(1));
+    const actual=pred.map(v=>(parseFloat(v)+Math.random()*6-3).toFixed(1));
+    c.setOption({backgroundColor:'transparent',
+      tooltip:{trigger:'axis',backgroundColor:'rgba(6,14,24,0.9)',borderColor:'rgba(45,224,192,0.3)',textStyle:{color:'#c5d3e0',fontSize:10}},
+      legend:{top:0,textStyle:{color:'#7d93a4',fontSize:9},itemWidth:10,itemHeight:6},
+      grid:{top:20,right:8,bottom:18,left:40},
+      xAxis:{type:'category',data:h24,boundaryGap:false,axisLine:{lineStyle:{color:'rgba(45,224,192,0.12)'}},axisLabel:{color:'#5f7385',fontSize:8,interval:3},axisTick:{show:false}},
+      yAxis:{type:'value',splitLine:{lineStyle:{color:'rgba(45,224,192,0.06)'}},axisLabel:{color:'#5f7385',fontSize:8}},
+      series:[
+        {name:'预测值',type:'line',smooth:true,symbol:'none',data:pred,lineStyle:{color:'#a882ff',width:2},itemStyle:{color:'#a882ff'},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(168,130,255,0.3)'},{offset:1,color:'rgba(168,130,255,0)'}]}}},
+        {name:'实际值',type:'line',smooth:true,symbol:'none',data:actual,lineStyle:{color:'#2de0c0',width:1.5,type:'dashed'},itemStyle:{color:'#2de0c0'}}
+      ]
+    });charts['chart-agent-dispatch']=c;
+  }
+}
+
+// ============ ISOMETRIC 3D SCENE ============
+let sceneAnimId=null;
+function initCanvasScenes(){
+  if(sceneAnimId)cancelAnimationFrame(sceneAnimId);
+  const ad=document.getElementById('angle-display');if(ad)ad.textContent=sceneAngle+'\u00b0';
+  const canvases=[...document.querySelectorAll('.scene-3d canvas')];
+  if(!canvases.length)return;
+  canvases.forEach(cv=>{
+    const rect=cv.parentElement.getBoundingClientRect();
+    const dpr=window.devicePixelRatio||1;
+    cv.width=rect.width*dpr;cv.height=rect.height*dpr;
+    cv.style.width=rect.width+'px';cv.style.height=rect.height+'px';
+    cv._w=rect.width;cv._h=rect.height;cv._dpr=dpr;
+  });
+  const t0=performance.now();
+  function frame(now){
+    const t=(now-t0)/1000;
+    canvases.forEach(cv=>{
+      const ctx=cv.getContext('2d');
+      ctx.setTransform(cv._dpr,0,0,cv._dpr,0,0);
+      ctx.clearRect(0,0,cv._w,cv._h);
+      drawScene(ctx,cv._w,cv._h,cv.id,t);
+    });
+    sceneAnimId=requestAnimationFrame(frame);
+  }
+  sceneAnimId=requestAnimationFrame(frame);
+}
+
+// iso projection (dynamic rotation + tilt controlled by UI buttons)
+let SCENE_ROT=false, GCX=7, GCY=4.5;
+var sceneAngle=50, sceneTilt=0.30; // angle in degrees, tilt = y-coefficient
+function iso(cx,cy,x,y,z,s){
+  const rad=sceneAngle*Math.PI/180;
+  const cos=Math.cos(rad), sin=Math.sin(rad);
+  const dx=x-GCX, dy=y-GCY;
+  const rx=GCX + dx*cos + dy*sin;
+  const ry=GCY - dx*sin + dy*cos;
+  return {x:cx+(rx-ry)*s*0.86,y:cy+(rx+ry)*s*sceneTilt-z*s*(0.4+sceneTilt*1.2)};
+}
+function depthKey(x,y){
+  const rad=sceneAngle*Math.PI/180;
+  const cos=Math.cos(rad), sin=Math.sin(rad);
+  const dx=x-GCX, dy=y-GCY;
+  return (GCX+dx*cos+dy*sin)+(GCY-dx*sin+dy*cos);
+}
+function fill(ctx,pts,color){ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.closePath();ctx.fillStyle=color;ctx.fill();}
+// draw a cuboid at grid x,y with size w,d,h (rotation-proof: all side faces sorted back-to-front)
+function box(ctx,cx,cy,s,x,y,w,d,h,top,left,right){
+  const corners=[[x,y],[x+w,y],[x+w,y+d],[x,y+d]];
+  const bot=corners.map(p=>iso(cx,cy,p[0],p[1],0,s));
+  const roof=corners.map(p=>iso(cx,cy,p[0],p[1],h,s));
+  const faces=[];
+  for(let i=0;i<4;i++){const j=(i+1)%4;
+    faces.push({depth:(bot[i].y+bot[j].y+roof[i].y+roof[j].y)/4,pts:[bot[i],bot[j],roof[j],roof[i]],col:(i%2===0)?right:left});
+  }
+  faces.sort((a,b)=>a.depth-b.depth).forEach(f=>fill(ctx,f.pts,f.col));
+  fill(ctx,roof,top);
+}
+
+function drawGridBG(ctx,w,h,t){
+  ctx.save();ctx.strokeStyle='rgba(45,224,192,0.05)';ctx.lineWidth=1;
+  // perspective floor lines at bottom
+  for(let i=0;i<14;i++){const y=h*0.62+i*i*1.1;if(y>h)break;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.globalAlpha=1-i/14;ctx.stroke();}
+  ctx.globalAlpha=1;ctx.restore();
+}
+
+function drawOrb(ctx,x,y,r,label,sub,t,hue){
+  const pulse=1+Math.sin(t*2)*0.04;r*=pulse;
+  ctx.save();
+  for(let i=0;i<2;i++){ctx.beginPath();ctx.ellipse(x,y,r*(1.5+i*0.4),r*(0.5+i*0.13),0,0,Math.PI*2);ctx.strokeStyle=`rgba(51,209,255,${0.25-i*0.1})`;ctx.lineWidth=1.5;ctx.stroke();}
+  const g=ctx.createRadialGradient(x,y,0,x,y,r);
+  g.addColorStop(0,'rgba(210,250,255,0.95)');g.addColorStop(0.4,hue+'cc');g.addColorStop(1,hue+'00');
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+  // main label
+  ctx.fillStyle='#eafcff';ctx.font='bold 14px Microsoft YaHei';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.shadowColor=hue;ctx.shadowBlur=8;ctx.fillText(label,x,y);ctx.shadowBlur=0;
+  // subtitle chip below the orb
+  if(sub){
+    ctx.font='11px Microsoft YaHei';const tw=ctx.measureText(sub).width;const cw=tw+16,ch=19,yy=y+r+13;
+    ctx.beginPath();ctx.roundRect(x-cw/2,yy-ch/2,cw,ch,5);ctx.fillStyle='rgba(8,20,30,0.78)';ctx.fill();
+    ctx.strokeStyle=hue+'aa';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(x-cw/2,yy-ch/2,cw,ch,5);ctx.stroke();
+    ctx.fillStyle='#cfeef7';ctx.fillText(sub,x,yy);
+  }
+  ctx.restore();
+}
+
+function drawTurbine(ctx,cx,cy,s,gx,gy,t,speed=1){
+  const base=iso(cx,cy,gx,gy,0,s);const topH=2.6;const top=iso(cx,cy,gx,gy,topH,s);
+  ctx.strokeStyle='rgba(220,230,238,0.9)';ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(base.x,base.y);ctx.lineTo(top.x,top.y);ctx.stroke();
+  ctx.save();ctx.translate(top.x,top.y-2);
+  const ang=t*speed;
+  ctx.strokeStyle='rgba(240,245,250,0.95)';ctx.lineWidth=2;
+  for(let i=0;i<3;i++){const a=ang+i*Math.PI*2/3;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(a)*16,Math.sin(a)*16);ctx.stroke();}
+  ctx.beginPath();ctx.arc(0,0,2.5,0,Math.PI*2);ctx.fillStyle='rgba(220,235,245,0.95)';ctx.fill();
+  ctx.restore();
+}
+
+function drawSolar(ctx,cx,cy,s,gx,gy){
+  for(let r=0;r<2;r++)for(let c=0;c<3;c++){
+    const x=gx+c*0.55,y=gy+r*0.7;
+    const p1=iso(cx,cy,x,y,0.18,s),p2=iso(cx,cy,x+0.45,y,0.18,s),p3=iso(cx,cy,x+0.45,y+0.5,0.05,s),p4=iso(cx,cy,x,y+0.5,0.05,s);
+    fill(ctx,[p1,p2,p3,p4],'rgba(40,120,180,0.75)');
+    ctx.strokeStyle='rgba(120,200,240,0.5)';ctx.lineWidth=0.7;ctx.stroke();
+  }
+}
+
+function drawTower(ctx,cx,cy,s,gx,gy){
+  const b=iso(cx,cy,gx,gy,0,s),tp=iso(cx,cy,gx,gy,3,s);
+  ctx.strokeStyle='rgba(210,220,228,0.85)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(b.x-6,b.y);ctx.lineTo(tp.x,tp.y);ctx.lineTo(b.x+6,b.y);ctx.stroke();
+  for(let i=1;i<4;i++){const y=b.y+(tp.y-b.y)*i/4;const wpx=6*(1-i/4.5);ctx.beginPath();ctx.moveTo(b.x-wpx,y);ctx.lineTo(b.x+wpx,y);ctx.stroke();}
+  ctx.beginPath();ctx.moveTo(tp.x-10,tp.y+6);ctx.lineTo(tp.x+10,tp.y+6);ctx.moveTo(tp.x-8,tp.y+12);ctx.lineTo(tp.x+8,tp.y+12);ctx.stroke();
+}
+
+// flowing energy particle along a path of iso points
+function drawFlow(ctx,pts,t,color,speed=0.35){
+  for(let k=0;k<3;k++){
+    let f=((t*speed+k/3)%1);
+    // find segment
+    const total=pts.length-1;const seg=Math.min(Math.floor(f*total),total-1);const lf=f*total-seg;
+    const p=pts[seg],q=pts[seg+1];const x=p.x+(q.x-p.x)*lf,y=p.y+(q.y-p.y)*lf;
+    ctx.beginPath();ctx.arc(x,y,2.5,0,Math.PI*2);ctx.fillStyle=color;ctx.shadowColor=color;ctx.shadowBlur=8;ctx.fill();ctx.shadowBlur=0;
+  }
+}
+
+// draw the glowing platform/pedestal with "enos"
+function drawPlatform(ctx,cx,cy,s,gw,gd){
+  const th=0.55; // platform thickness
+  const t1=iso(cx,cy,0,0,0,s),t2=iso(cx,cy,gw,0,0,s),t3=iso(cx,cy,gw,gd,0,s),t4=iso(cx,cy,0,gd,0,s);
+  const tc=[t1,t2,t3,t4];
+  const bc=[iso(cx,cy,0,0,-th,s),iso(cx,cy,gw,0,-th,s),iso(cx,cy,gw,gd,-th,s),iso(cx,cy,0,gd,-th,s)];
+  // all 4 thickness faces sorted back-to-front (top surface drawn after covers far ones)
+  const pf=[];for(let i=0;i<4;i++){const j=(i+1)%4;pf.push({depth:(tc[i].y+tc[j].y)/2,pts:[tc[i],tc[j],bc[j],bc[i]],col:(i%2===0)?'rgba(14,32,48,0.96)':'rgba(9,22,36,0.96)'});}
+  pf.sort((a,b)=>a.depth-b.depth).forEach(f=>fill(ctx,f.pts,f.col));
+  // top surface
+  const g=ctx.createLinearGradient(t1.x,t1.y,t3.x,t3.y);
+  g.addColorStop(0,'rgba(18,44,60,0.95)');g.addColorStop(1,'rgba(10,26,40,0.95)');
+  fill(ctx,[t1,t2,t3,t4],g);
+  // grid on top
+  ctx.strokeStyle='rgba(45,224,192,0.1)';ctx.lineWidth=0.6;
+  for(let i=1;i<gw;i++){const a=iso(cx,cy,i,0,0,s),b=iso(cx,cy,i,gd,0,s);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+  for(let j=1;j<gd;j++){const a=iso(cx,cy,0,j,0,s),b=iso(cx,cy,gw,j,0,s);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+  // top edge glow
+  ctx.strokeStyle='rgba(45,224,192,0.5)';ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.moveTo(t1.x,t1.y);ctx.lineTo(t2.x,t2.y);ctx.lineTo(t3.x,t3.y);ctx.lineTo(t4.x,t4.y);ctx.closePath();ctx.stroke();
+  // "enos" label on front side
+  const mid=iso(cx,cy,gw*0.5,gd,-th*0.5,s);
+  ctx.save();ctx.fillStyle='rgba(150,180,195,0.5)';ctx.font='italic bold 15px Arial';ctx.textAlign='center';ctx.fillText('enos',mid.x+18,mid.y+6);ctx.restore();
+}
+
+// ground quad (roads / lawn / lots)
+function iquad(ctx,cx,cy,s,x,y,w,d,color,z=0.02){
+  const p1=iso(cx,cy,x,y,z,s),p2=iso(cx,cy,x+w,y,z,s),p3=iso(cx,cy,x+w,y+d,z,s),p4=iso(cx,cy,x,y+d,z,s);
+  fill(ctx,[p1,p2,p3,p4],color);
+}
+function drawBuilding(ctx,cx,cy,s,x,y,w,d,h){
+  box(ctx,cx,cy,s,x,y,w,d,h,'rgba(225,232,240,0.96)','rgba(155,168,180,0.96)','rgba(185,198,210,0.96)');
+  const a=iso(cx,cy,x,y,h,s),b=iso(cx,cy,x+w,y,h,s),c=iso(cx,cy,x+w,y+d,h,s),e=iso(cx,cy,x,y+d,h,s);
+  ctx.strokeStyle='rgba(200,218,232,0.4)';ctx.lineWidth=0.8;
+  ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineTo(c.x,c.y);ctx.lineTo(e.x,e.y);ctx.closePath();ctx.stroke();
+  box(ctx,cx,cy,s,x+0.18,y+0.18,0.32,0.32,h+0.14,'rgba(205,215,225,0.92)','rgba(140,152,164,0.92)','rgba(170,182,194,0.92)');
+  box(ctx,cx,cy,s,x+w-0.55,y+d-0.55,0.32,0.32,h+0.14,'rgba(205,215,225,0.92)','rgba(140,152,164,0.92)','rgba(170,182,194,0.92)');
+}
+function drawStorageYard(ctx,cx,cy,s,x,y,cols,rows){
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)
+    box(ctx,cx,cy,s,x+c*0.52,y+r*0.82,0.4,0.64,0.42,'rgba(215,225,235,0.96)','rgba(145,158,170,0.96)','rgba(175,188,200,0.96)');
+}
+function drawCoolingYard(ctx,cx,cy,s,x,y,cols,rows){
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const bx=x+c*0.6,by=y+r*0.7;
+    box(ctx,cx,cy,s,bx,by,0.46,0.52,0.3,'rgba(210,220,230,0.92)','rgba(140,152,164,0.92)','rgba(170,182,194,0.92)');
+    const tp=iso(cx,cy,bx+0.23,by+0.26,0.32,s);
+    ctx.beginPath();ctx.arc(tp.x,tp.y,3,0,Math.PI*2);
+    ctx.strokeStyle='rgba(160,172,184,0.8)';ctx.lineWidth=1;ctx.stroke();
+  }
+}
+function drawSubstation(ctx,cx,cy,s,x,y){
+  iquad(ctx,cx,cy,s,x,y,2.6,1.5,'rgba(22,32,44,0.85)',0.02);
+  box(ctx,cx,cy,s,x+0.25,y+0.25,0.5,0.5,0.55,'rgba(210,220,230,0.96)','rgba(138,150,162,0.96)','rgba(168,180,192,0.96)');
+  box(ctx,cx,cy,s,x+1.05,y+0.35,0.5,0.5,0.55,'rgba(210,220,230,0.96)','rgba(138,150,162,0.96)','rgba(168,180,192,0.96)');
+  drawTower(ctx,cx,cy,s,x+2.0,y+0.3);
+  drawTower(ctx,cx,cy,s,x+0.2,y+1.15);
+}
+function drawTree(ctx,cx,cy,s,x,y){
+  const b=iso(cx,cy,x,y,0,s),tp=iso(cx,cy,x,y,0.42,s);
+  ctx.strokeStyle='rgba(90,74,48,0.9)';ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(tp.x,tp.y);ctx.stroke();
+  ctx.beginPath();ctx.arc(tp.x,tp.y-2,3.6,0,Math.PI*2);ctx.fillStyle='rgba(34,150,92,0.92)';ctx.fill();
+}
+function drawFence(ctx,cx,cy,s,x0,y0,x1,y1){
+  const hh=0.42,corners=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];
+  ctx.strokeStyle='rgba(70,200,200,0.32)';ctx.lineWidth=1;
+  ctx.beginPath();corners.forEach((c,i)=>{const p=iso(cx,cy,c[0],c[1],hh,s);i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});ctx.closePath();ctx.stroke();
+  for(let e=0;e<4;e++){const a=corners[e],b=corners[(e+1)%4],n=7;for(let k=0;k<=n;k++){const gx=a[0]+(b[0]-a[0])*k/n,gy=a[1]+(b[1]-a[1])*k/n;const p0=iso(cx,cy,gx,gy,0,s),p1=iso(cx,cy,gx,gy,hh,s);ctx.beginPath();ctx.moveTo(p0.x,p0.y);ctx.lineTo(p1.x,p1.y);ctx.stroke();}}
+}
+function drawParking(ctx,cx,cy,s,x,y,w,d){
+  iquad(ctx,cx,cy,s,x,y,w,d,'rgba(20,30,42,0.88)',0.03);
+  ctx.strokeStyle='rgba(180,192,204,0.25)';ctx.lineWidth=0.6;
+  for(let i=1;i<Math.round(w/0.32);i++){const a=iso(cx,cy,x+i*0.32,y,0.04,s),b=iso(cx,cy,x+i*0.32,y+d,0.04,s);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+  for(let i=0;i<Math.min(4,Math.floor(w/0.5));i++)box(ctx,cx,cy,s,x+0.12+i*0.62,y+0.14,0.34,0.46,0.12,'rgba(200,210,220,0.88)','rgba(130,142,154,0.88)','rgba(160,172,184,0.88)');
+}
+
+// ---- routed energy pipe (glowing tube) with animated flow ----
+function drawPipe(ctx,cx,cy,s,pts3d,color,t,opts={}){
+  const P=pts3d.map(p=>iso(cx,cy,p[0],p[1],p[2],s));
+  const w=opts.w||4;
+  ctx.save();ctx.lineJoin='round';ctx.lineCap='round';
+  const stroke=(lw,col)=>{ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.beginPath();P.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke();};
+  stroke(w+7,color+'1a');   // outer glow
+  stroke(w+2,color+'55');   // mid
+  stroke(Math.max(1,w*0.5),color+'e6'); // core
+  ctx.restore();
+  // flowing highlights
+  const seg=[];let total=0;
+  for(let i=0;i<P.length-1;i++){const d=Math.hypot(P[i+1].x-P[i].x,P[i+1].y-P[i].y);seg.push(d);total+=d;}
+  if(total<1){return;}
+  const speed=opts.speed||70,gap=opts.gap||44,dir=opts.dir===-1?-1:1;
+  const n=Math.max(2,Math.floor(total/gap));
+  for(let k=0;k<n;k++){
+    let dist=(((t*speed*dir)+k*gap)%total+total)%total,acc=0,si=0;
+    while(si<seg.length-1&&acc+seg[si]<dist){acc+=seg[si];si++;}
+    const lf=seg[si]?(dist-acc)/seg[si]:0,a=P[si],b=P[si+1]||P[si];
+    const x=a.x+(b.x-a.x)*lf,y=a.y+(b.y-a.y)*lf;
+    ctx.beginPath();ctx.arc(x,y,opts.dot||2.4,0,Math.PI*2);
+    ctx.fillStyle='#eafffb';ctx.shadowColor=color;ctx.shadowBlur=9;ctx.fill();ctx.shadowBlur=0;
+  }
+}
+function drawLegend(ctx,w,h){
+  const items=[['\u7eff\u7535(\u98ce\u673a)','#00ff9d'],['\u7535\u7f51/\u914d\u7535','#33d1ff'],['\u50a8\u80fd(\u53cc\u5411)','#2de0c0'],['\u67f4\u53d1(\u5907\u7528)','#ff8f7a'],['AI\u4fe1\u606f\u6d41','#5599ff']];
+  let x=16,y=h-18;ctx.save();ctx.font='11px Microsoft YaHei';ctx.textBaseline='middle';
+  items.forEach(it=>{
+    ctx.strokeStyle=it[1];ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+18,y);ctx.stroke();
+    ctx.fillStyle='#9fb4c2';ctx.textAlign='left';ctx.fillText(it[0],x+23,y);
+    x+=23+ctx.measureText(it[0]).width+18;
+  });
+  ctx.restore();
+}
+
+function drawScene(ctx,w,h,id,t){
+  // Dark background — no grid lines
+  ctx.fillStyle='#04070e';ctx.fillRect(0,0,w,h);
+  const cx=w*0.50, cy=h*0.24, s=Math.min(w,h)/20;
+  const gw=14,gd=9; GCX=gw/2; GCY=gd/2;
+
+  // White building helpers
+  const W={top:'rgba(230,238,245,0.96)',left:'rgba(155,168,180,0.96)',right:'rgba(185,198,210,0.96)'};
+  const WS={top:'rgba(210,220,228,0.96)',left:'rgba(130,142,154,0.96)',right:'rgba(160,172,184,0.96)'};
+
+  // Main dark platform — clean, no grid
+  (function(){
+    const th=0.3,px0=-6,py0=0,px1=10.5,py1=gd;
+    const t1=iso(cx,cy,px0,py0,0,s),t2=iso(cx,cy,px1,py0,0,s),t3=iso(cx,cy,px1,py1,0,s),t4=iso(cx,cy,px0,py1,0,s);
+    const bc=[iso(cx,cy,px0,py0,-th,s),iso(cx,cy,px1,py0,-th,s),iso(cx,cy,px1,py1,-th,s),iso(cx,cy,px0,py1,-th,s)];
+    const tc=[t1,t2,t3,t4];
+    const pf=[];for(let i=0;i<4;i++){const j=(i+1)%4;pf.push({depth:(tc[i].y+tc[j].y)/2,pts:[tc[i],tc[j],bc[j],bc[i]],col:(i%2===0)?'rgba(10,18,28,0.98)':'rgba(8,14,22,0.98)'});}
+    pf.sort((a,b)=>a.depth-b.depth).forEach(f=>fill(ctx,f.pts,f.col));
+    // top surface — very dark with subtle teal edge
+    const g=ctx.createLinearGradient(t1.x,t1.y,t3.x,t3.y);
+    g.addColorStop(0,'rgba(12,22,34,0.98)');g.addColorStop(1,'rgba(8,16,26,0.98)');
+    fill(ctx,[t1,t2,t3,t4],g);
+    // edge glow
+    ctx.strokeStyle='rgba(45,224,192,0.25)';ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(t1.x,t1.y);ctx.lineTo(t2.x,t2.y);ctx.lineTo(t3.x,t3.y);ctx.lineTo(t4.x,t4.y);ctx.closePath();ctx.stroke();
+  })();
+
+  const focus=id.replace('canvas-','');
+  const showAI = focus !== 'greentoken';
+  const hot=c=>{
+    if(focus==='ai-source'&&c==='wind')return true;
+    if(focus==='ai-storage'&&c==='bess')return true;
+    if(focus==='ai-supply'&&c==='sst')return true;
+    if(focus==='ai-cooling'&&c==='cool')return true;
+    if((focus==='ai-it'||focus==='overview')&&c==='it')return true;
+    return false;
+  };
+
+  // Inner campus zone — slightly lighter dark pad
+  const fx0=0.5,fy0=0.5,fx1=10.5,fy1=8.5;
+  iquad(ctx,cx,cy,s,fx0,fy0,fx1-fx0,fy1-fy0,'rgba(18,28,40,0.6)');
+
+  const tSpd=hot('wind')?4.5:1.5;
+  const items=[];
+  const add=(x,y,fn)=>items.push({d:depthKey(x,y),fn});
+
+  // === WIND TURBINES (outside left) ===
+  [[-4.5,1.0,0],[-4.8,3.0,1],[-4.5,5.0,2],[-4.8,7.0,0.5],[-4.5,8.5,1.5]].forEach(p=>add(p[0],p[1],()=>drawTurbine(ctx,cx,cy,s,p[0],p[1],t+p[2],tSpd)));
+
+  // === SUBSTATIONS (outside left) ===
+  add(-2.0,2.0,()=>drawSubstation(ctx,cx,cy,s,-3.0,1.3));
+  add(-2.0,5.5,()=>drawSubstation(ctx,cx,cy,s,-3.0,4.8));
+
+  // === UPPER ZONE: power infra — all white/grey boxes ===
+  // 220kV 降压站
+  add(1.2,1.4,()=>box(ctx,cx,cy,s,0.7,0.7,1.4,1.1,1.0,W.top,W.left,W.right));
+  // 10kV 配电
+  add(3.0,1.4,()=>{for(let i=0;i<3;i++)box(ctx,cx,cy,s,2.5+i*0.5,0.8,0.38,0.65,0.5,WS.top,WS.left,WS.right);});
+  // SST
+  add(5.0,1.4,()=>box(ctx,cx,cy,s,4.4,0.7,1.4,1.1,1.2,W.top,W.left,W.right));
+  // BESS 储能
+  add(7.0,1.4,()=>drawStorageYard(ctx,cx,cy,s,6.3,0.8,3,2));
+  // 柴发
+  add(9.2,1.4,()=>{box(ctx,cx,cy,s,8.7,0.8,1.0,0.65,0.55,WS.top,WS.left,WS.right);box(ctx,cx,cy,s,8.7,1.5,1.0,0.65,0.55,WS.top,WS.left,WS.right);});
+
+  // === MAIN ZONE: 8 DC halls — all white ===
+  const colX=[1.0,3.3,5.6,7.9];
+  const rowYY=[2.8,4.7];
+  colX.forEach(xx=>rowYY.forEach(yy=>{add(xx+0.9,yy+0.7,()=>box(ctx,cx,cy,s,xx,yy,1.8,1.4,1.1,W.top,W.left,W.right));}));
+
+  // === COOLING ===
+  add(9.6,4.5,()=>drawCoolingYard(ctx,cx,cy,s,9.0,3.8,2,2));
+
+  // === LOWER ZONE: gate / office ===
+  add(5.0,7.5,()=>box(ctx,cx,cy,s,4.3,7.0,1.4,0.7,0.4,WS.top,WS.left,WS.right));
+  add(2.0,7.5,()=>box(ctx,cx,cy,s,1.2,7.0,2.0,0.9,0.6,WS.top,WS.left,WS.right));
+  add(8.0,7.5,()=>drawParking(ctx,cx,cy,s,7.2,7.0,2.4,0.9));
+
+  items.sort((a,b)=>a.d-b.d).forEach(it=>it.fn());
+
+  // ---------- ZONE LABELS ----------
+  function zoneLabel(gx,gy,gz,text,color){
+    const p=iso(cx,cy,gx,gy,gz,s);
+    ctx.save();ctx.font='bold 10px Microsoft YaHei';ctx.textAlign='center';ctx.textBaseline='middle';
+    const tw=ctx.measureText(text).width;
+    ctx.fillStyle='rgba(4,10,20,0.75)';ctx.beginPath();ctx.roundRect(p.x-tw/2-5,p.y-8,tw+10,16,3);ctx.fill();
+    ctx.strokeStyle=color;ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(p.x-tw/2-5,p.y-8,tw+10,16,3);ctx.stroke();
+    ctx.fillStyle=color;ctx.fillText(text,p.x,p.y);ctx.restore();
+  }
+  zoneLabel(-2.0,1.5,1.5,'升压站A(风)','#c8d8e4');
+  zoneLabel(-2.0,5.0,1.5,'升压站B(风+储)','#c8d8e4');
+  zoneLabel(-4.8,4.5,2.0,'风机集群','#00ff9d');
+  zoneLabel(1.2,0.2,1.8,'220kV降压站','#c8d8e4');
+  zoneLabel(3.0,0.2,1.5,'10kV配电','#c8d8e4');
+  zoneLabel(5.0,0.2,2.0,'SST','#2de0c0');
+  zoneLabel(7.0,0.2,1.5,'BESS储能','#2de0c0');
+  zoneLabel(9.2,0.2,1.5,'柴发(备用)','#c8d8e4');
+  zoneLabel(5.0,3.8,2.0,'数据中心机房','#c8d8e4');
+  zoneLabel(9.6,4.2,1.5,'制冷','#c8d8e4');
+
+  // ---------- FOCUS HIGHLIGHT ----------
+  function drawFocusHighlight(x0,y0,x1,y1,label,color){
+    const corners=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];
+    const pts=corners.map(p=>iso(cx,cy,p[0],p[1],1.5,s));
+    const alpha=0.55+Math.sin(t*3)*0.25;
+    ctx.save();
+    ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.globalAlpha=alpha;ctx.setLineDash([6,3]);
+    ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.stroke();
+    ctx.shadowColor=color;ctx.shadowBlur=18;ctx.lineWidth=1;ctx.globalAlpha=alpha*0.35;ctx.setLineDash([]);
+    ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.stroke();
+    ctx.shadowBlur=0;ctx.globalAlpha=1;ctx.setLineDash([]);
+    const top=pts.reduce((a,b)=>a.y<b.y?a:b);
+    ctx.font='bold 11px Microsoft YaHei';
+    const tw=ctx.measureText(label).width;
+    ctx.fillStyle='rgba(4,10,20,0.88)';ctx.beginPath();ctx.roundRect(top.x-tw/2-8,top.y-24,tw+16,20,4);ctx.fill();
+    ctx.strokeStyle=color;ctx.lineWidth=1;ctx.globalAlpha=0.9;
+    ctx.beginPath();ctx.roundRect(top.x-tw/2-8,top.y-24,tw+16,20,4);ctx.stroke();
+    ctx.fillStyle=color;ctx.globalAlpha=1;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(label,top.x,top.y-14);
+    ctx.restore();
+  }
+  if(focus==='ai-source')  drawFocusHighlight(-5.5,0.2,-3.2,9.2,'▶ 源侧响应激活',C.green);
+  if(focus==='ai-storage') drawFocusHighlight(5.8,0.5,9.2,2.6,'▶ 储能出力激活',C.cyan);
+  if(focus==='ai-supply')  drawFocusHighlight(3.8,0.5,6.2,2.6,'▶ SST配储调节',C.teal);
+  if(focus==='ai-it')      drawFocusHighlight(0.4,2.5,10.6,6.6,'▶ IT算力调度激活',C.purple);
+  if(focus==='ai-cooling') drawFocusHighlight(8.4,3.4,10.6,6.2,'▶ 制冷响应激活',C.red);
+
+  // ---------- ENERGY FLOW PIPES — ground level (z=0.05) ----------
+  const Z=0.05;
+  // Green: wind → substations
+  drawPipe(ctx,cx,cy,s,[[-4.5,2.0,Z],[-3.0,1.8,Z]],C.green,t,{w:3.5,speed:65});
+  drawPipe(ctx,cx,cy,s,[[-4.5,6.0,Z],[-3.0,5.5,Z]],C.green,t,{w:3.5,speed:65});
+  // Cyan: substations → 降压站 → power chain
+  drawPipe(ctx,cx,cy,s,[[-2.0,2.0,Z],[0.7,1.3,Z]],C.cyan,t,{w:4,speed:75});
+  drawPipe(ctx,cx,cy,s,[[-2.0,5.5,Z],[-1.0,3.5,Z],[-0.5,2.0,Z],[0.7,1.3,Z]],C.cyan,t,{w:3,speed:68});
+  drawPipe(ctx,cx,cy,s,[[2.1,1.2,Z],[2.5,1.1,Z]],C.cyan,t,{w:3,speed:55});
+  drawPipe(ctx,cx,cy,s,[[4.0,1.1,Z],[4.4,1.0,Z]],C.cyan,t,{w:3,speed:58});
+  // Teal: BESS ↔ SST
+  drawPipe(ctx,cx,cy,s,[[5.8,1.0,Z],[6.3,0.9,Z]],C.teal,t,{w:2.5,speed:40,dir:-1});
+  // Main distribution: SST → DC halls (vertical drop)
+  drawPipe(ctx,cx,cy,s,[[5.0,1.9,Z],[5.0,2.6,Z]],C.cyan,t,{w:4,speed:80});
+  drawPipe(ctx,cx,cy,s,[[1.0,2.5,Z],[9.8,2.5,Z]],C.cyan,t,{w:3,speed:82});
+  colX.forEach(xx=>{
+    drawPipe(ctx,cx,cy,s,[[xx+0.9,2.5,Z],[xx+0.9,2.9,Z]],C.cyan,t,{w:2,speed:42,gap:20});
+    drawPipe(ctx,cx,cy,s,[[xx+0.9,4.4,Z],[xx+0.9,4.8,Z]],C.cyan,t,{w:2,speed:42,gap:20});
+  });
+  // Gold: heat flow to cooling
+  drawPipe(ctx,cx,cy,s,[[8.8,4.2,Z],[9.0,4.0,Z]],C.gold,t,{w:2.5,speed:38,gap:28});
+  // Red: diesel standby (slow reverse)
+  drawPipe(ctx,cx,cy,s,[[8.7,1.2,Z],[4.0,1.2,Z]],C.red,t,{w:1.5,speed:18,gap:55,dir:-1});
+
+  drawFence(ctx,cx,cy,s,fx0,fy0,fx1,fy1);
+  drawLegend(ctx,w,h);
+
+  // ========== AI CONTROL LAYER ==========
+  if(showAI){
+    const enosPos={x:w*0.45,y:h*0.88};
+    const tianshuPos=iso(cx,cy,-3.0,0.5,3.5,s);
+    const tianjiPos={x:cx-s*1,y:h*0.05+Math.sin(t*1.2)*3};
+    drawOrb(ctx,enosPos.x,enosPos.y,17,'EnOS','现场数据底座',t,'#33d1ff');
+    drawOrb(ctx,tianshuPos.x,tianshuPos.y,20,'天枢','协同控制大脑',t+1,'#2de0c0');
+    drawOrb(ctx,tianjiPos.x,tianjiPos.y,22,'天机','预测优化大脑',t+0.5,'#6ea8ff');
+    const fc='#5599ff';
+    const dv1=iso(cx,cy,2.0,3.5,1.2,s),dv2=iso(cx,cy,5.5,3.5,1.2,s),dv3=iso(cx,cy,8.5,4.0,1.2,s);
+    drawInfoFlow(ctx,[dv1,enosPos],t,fc,0.7);
+    drawInfoFlow(ctx,[dv2,enosPos],t+0.3,fc,0.7);
+    drawInfoFlow(ctx,[dv3,enosPos],t+0.6,fc,0.7);
+    drawInfoFlow(ctx,[enosPos,tianjiPos],t,fc,0.5);
+    drawInfoFlow(ctx,[tianjiPos,tianshuPos],t,'#00e8a0',0.55);
+    const ct1=iso(cx,cy,-3.0,2.0,1.0,s),ct2=iso(cx,cy,-3.0,5.5,1.0,s),ct3=iso(cx,cy,0.7,1.0,1.0,s);
+    drawInfoFlow(ctx,[tianshuPos,ct1],t+0.2,'#00e8a0',0.6);
+    drawInfoFlow(ctx,[tianshuPos,ct2],t+0.5,'#00e8a0',0.6);
+    drawInfoFlow(ctx,[tianshuPos,ct3],t+0.8,'#00e8a0',0.6);
+    ctx.save();ctx.font='9px Microsoft YaHei';ctx.textAlign='center';
+    ctx.fillStyle=fc;ctx.globalAlpha=0.85;
+    ctx.fillText('状态感知',enosPos.x-30,enosPos.y-16);
+    ctx.fillText('趋势预测',(enosPos.x+tianjiPos.x)/2+20,(enosPos.y+tianjiPos.y)/2);
+    ctx.fillStyle='#00e8a0';
+    ctx.fillText('策略生成',(tianjiPos.x+tianshuPos.x)/2,(tianjiPos.y+tianshuPos.y)/2-10);
+    ctx.fillText('调度执行',tianshuPos.x+35,tianshuPos.y+24);
+    ctx.restore();
+  } // end showAI
+} // end drawScene
+
+// AI info-flow: dashed pulsing line with flowing dot + optional label
+function drawInfoFlow(ctx,pts,t,color,speed,label){
+  ctx.save();
+  ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.setLineDash([6,4]);
+  ctx.globalAlpha=0.45+Math.sin(t*3)*0.2;
+  ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke();
+  ctx.setLineDash([]);ctx.globalAlpha=1;
+  const total=pts.length-1;const f=((t*speed)%1+1)%1;
+  const seg=Math.min(Math.floor(f*total),total-1),lf=f*total-seg;
+  const a=pts[seg],b=pts[seg+1]||pts[seg];
+  const px=a.x+(b.x-a.x)*lf,py=a.y+(b.y-a.y)*lf;
+  ctx.beginPath();ctx.arc(px,py,3,0,Math.PI*2);ctx.fillStyle='#fff';ctx.shadowColor=color;ctx.shadowBlur=10;ctx.fill();ctx.shadowBlur=0;
+  if(label){const mx=(pts[0].x+pts[pts.length-1].x)/2,my=(pts[0].y+pts[pts.length-1].y)/2-9;
+    ctx.font='10px Microsoft YaHei';ctx.textAlign='center';ctx.fillStyle=color;ctx.globalAlpha=0.85;ctx.fillText(label,mx,my);}
+  ctx.restore();
+}
+
+// ============ EVENTS & INIT ============
+document.addEventListener('click',e=>{
+  if(e.target.classList.contains('sub-tab-btn')){
+    currentSubTab=e.target.dataset.subtab;
+    document.querySelectorAll('.sub-tab-btn').forEach(b=>b.classList.remove('active'));
+    e.target.classList.add('active');
+    renderAISubPage();
+  }
+});
+let rt;
+window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{Object.values(charts).forEach(c=>{try{c.resize();}catch(e){}});initCanvasScenes();},200);});
+initTabs();renderPage();
+</script>
+</body>
+</html>
