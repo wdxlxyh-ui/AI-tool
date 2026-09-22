@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% set active_page = "kiro_gateway" %}
+{% block title %}Kiro Gateway 管理{% endblock %}
+{% block page_title %}Kiro Gateway{% endblock %}
+{% block page_subtitle %}AI 模型代理网关 · OpenAI/Anthropic 兼容{% endblock %}
+
+{% block head_extra %}
+<style>
+.status-bar{ display:flex; gap:12px; margin-bottom:20px; }
+.status-item{ flex:1; background:var(--bg-elevated); border-radius:8px; padding:14px 16px; display:flex; align-items:center; gap:12px; border:1px solid var(--border); }
+.status-dot{ width:10px; height:10px; border-radius:50%; background:var(--success); flex-shrink:0; }
+.status-dot.off{ background:var(--danger); }
+.status-dot.pending{ background:var(--warning); animation:pulse 2s infinite; }
+@keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:0.5} }
+.status-item .label{ font-size:11px; color:var(--text-dim); }
+.status-item .value{ font-size:14px; font-weight:600; color:var(--text); font-family:monospace; }
+
+.tabs{ display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:20px; }
+.tab{ padding:10px 16px; cursor:pointer; font-size:12px; color:var(--text-secondary); border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .2s; background:none; border-top:none; border-left:none; border-right:none; }
+.tab:hover{ color:var(--text); }
+.tab.active{ color:var(--accent); border-bottom-color:var(--accent); }
+
+.api-key-box{ background:var(--bg-elevated); border:1px solid var(--border); border-radius:8px; padding:14px; display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.api-key-box input{ flex:1; background:var(--bg-page); border:1px solid var(--border); border-radius:6px; padding:8px 12px; color:var(--text); font-family:monospace; font-size:12px; outline:none; }
+.api-key-box input:focus{ border-color:var(--accent); }
+.api-key-box .btn{ font-size:11px; padding:6px 12px; }
+
+.url-display{ background:var(--bg-page); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:12px; }
+.url-display .label{ font-size:10px; color:var(--text-dim); margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em; }
+.url-display .url{ font-family:monospace; font-size:13px; color:var(--accent); word-break:break-all; }
+
+.model-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; margin-bottom:16px; }
+.model-card{ background:var(--bg-elevated); border:1px solid var(--border); border-radius:8px; padding:14px; cursor:pointer; transition:all .2s; position:relative; }
+.model-card:hover{ border-color:var(--accent); background:var(--accent-dim); }
+.model-card.selected{ border-color:var(--accent); background:var(--accent-dim); }
+.model-card .name{ font-size:13px; font-weight:600; margin-bottom:4px; color:var(--text); }
+.model-card .desc{ font-size:10px; color:var(--text-dim); line-height:1.4; }
+.model-card .badge{ position:absolute; top:8px; right:8px; font-size:9px; padding:2px 6px; border-radius:3px; }
+
+.code-example{ background:var(--bg-elevated); border-radius:8px; overflow:hidden; margin-top:16px; border:1px solid var(--border); }
+.code-example .header{ background:var(--bg-page); padding:8px 14px; font-size:10px; color:var(--text-dim); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+.code-example pre{ margin:0; border:none; border-radius:0; padding:14px; font-size:11px; line-height:1.5; max-height:300px; overflow:auto; }
+
+.log-container{ background:var(--bg-page); border:1px solid var(--border); border-radius:8px; padding:14px; max-height:400px; overflow:auto; font-family:monospace; font-size:11px; line-height:1.6; color:var(--text-secondary); white-space:pre-wrap; }
+
+.action-buttons{ display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="status-bar">
+  <div class="status-item">
+    <div><div class="status-dot" id="status-dot"></div></div>
+    <div>
+      <div class="label">服务状态</div>
+      <div class="value" id="status-text">检测中...</div>
+    </div>
+  </div>
+  <div class="status-item">
+    <div><div class="status-dot" style="background:var(--accent);"></div></div>
+    <div>
+      <div class="label">监听端口</div>
+      <div class="value">{{ status.port }}</div>
+    </div>
+  </div>
+  <div class="status-item">
+    <div><div class="status-dot" style="background:var(--purple);"></div></div>
+    <div>
+      <div class="label">进程 ID</div>
+      <div class="value" id="pid-text">{{ status.pid or '—' }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('overview')">概览</button>
+  <button class="tab" onclick="showTab('models')">模型</button>
+  <button class="tab" onclick="showTab('connection')">连接</button>
+  <button class="tab" onclick="showTab('logs')">日志</button>
+</div>
+
+<div id="tab-overview">
+  <h4 style="margin-bottom:12px;">API Key</h4>
+  <div class="api-key-box">
+    <input type="text" id="api-key-input" value="{{ api_key or '未设置' }}" readonly>
+    <button class="btn btn-outline" onclick="copyApiKey()">📋 复制</button>
+  </div>
+  
+  <div class="url-display">
+    <div class="label">OpenAI 兼容接口 Base URL</div>
+    <div class="url" id="openai-url">http://{{ host_ip }}:{{ status.port }}/v1</div>
+  </div>
+  
+  <div class="url-display">
+    <div class="label">Anthropic 兼容接口 Base URL</div>
+    <div class="url" id="anthropic-url">http://{{ host_ip }}:{{ status.port }}</div>
+  </div>
+  
+  <div class="action-buttons">
+    <button class="btn btn-success" id="btn-start" onclick="startGateway()">▶ 启动服务</button>
+    <button class="btn btn-outline" id="btn-restart" onclick="restartGateway()">🔄 重启</button>
+    <button class="btn btn-danger" id="btn-stop" onclick="stopGateway()">⏹ 停止</button>
+    <button class="btn btn-outline" onclick="testAPI()">🔌 测试连接</button>
+  </div>
+</div>
+
+<div id="tab-models" style="display:none;">
+  <h4 style="margin-bottom:12px;">可用模型</h4>
+  <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">点击模型查看调用示例代码</p>
+  
+  <div class="model-grid" id="model-grid">
+    {% for model in models %}
+    <div class="model-card{% if loop.first %} selected{% endif %}" onclick="selectModel('{{ model.id }}')">
+      <div class="name">{{ model.name }}</div>
+      <div class="desc">{{ model.description }}</div>
+      {% if model.id == 'claude-sonnet-4-5' %}
+      <span class="badge" style="background:rgba(63,185,80,.15);color:var(--success);">推荐</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  
+  <div class="code-example">
+    <div class="header">
+      <span>Python 调用示例</span>
+      <button class="btn btn-xs btn-outline" onclick="copyCode()">📋 复制代码</button>
+    </div>
+    <pre id="code-example"><code>from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://{{ host_ip }}:{{ status.port }}/v1",
+    api_key="{{ api_key }}"
+)
+
+response = client.chat.completions.create(
+    model="claude-sonnet-4-5",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+
+print(response.choices[0].message.content)</code></pre>
+  </div>
+</div>
+
+<div id="tab-connection" style="display:none;">
+  <h4 style="margin-bottom:12px;">连接配置</h4>
+  
+  <div class="code-example">
+    <div class="header">OpenAI SDK (Python)</div>
+    <pre><code>from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://{{ host_ip }}:{{ status.port }}/v1",
+    api_key="{{ api_key }}"
+)</code></pre>
+  </div>
+  
+  <div class="code-example">
+    <div class="header">Anthropic SDK (Python)</div>
+    <pre><code>from anthropic import Anthropic
+
+client = Anthropic(
+    api_key="{{ api_key }}",
+    base_url="http://{{ host_ip }}:{{ status.port }}"
+)</code></pre>
+  </div>
+  
+  <div class="code-example">
+    <div class="header">cURL</div>
+    <pre><code>curl http://{{ host_ip }}:{{ status.port }}/v1/chat/completions \
+  -H "Authorization: Bearer {{ api_key }}" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"Hello!"}]}'</code></pre>
+  </div>
+</div>
+
+<div id="tab-logs" style="display:none;">
+  <h4 style="margin-bottom:12px;">服务日志</h4>
+  <div class="action-buttons" style="margin-top:0;margin-bottom:12px;">
+    <button class="btn btn-outline btn-sm" onclick="refreshLogs()">🔄 刷新</button>
+  </div>
+  <div class="log-container" id="log-container">加载中...</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var currentStatus = {{ 'true' if status.running else 'false' }};
+var currentModel = 'claude-sonnet-4-5';
+
+function updateStatus(){
+  fetch('/kiro-gateway/api/status').then(r=>r.json()).then(d=>{
+    currentStatus = d.running;
+    document.getElementById('status-dot').className = 'status-dot' + (d.running ? '' : ' off');
+    document.getElementById('status-text').textContent = d.running ? '运行中' : '已停止';
+    document.getElementById('pid-text').textContent = d.pid || '—';
+    document.getElementById('btn-start').style.display = d.running ? 'none' : 'inline-flex';
+    document.getElementById('btn-stop').style.display = d.running ? 'inline-flex' : 'none';
+    document.getElementById('btn-restart').style.display = d.running ? 'inline-flex' : 'none';
+  }).catch(e=>{
+    document.getElementById('status-dot').className = 'status-dot pending';
+    document.getElementById('status-text').textContent = '检测失败';
+  });
+}
+
+function startGateway(){
+  showToast('启动服务...');
+  fetch('/kiro-gateway/api/start',{method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.ok){ showToast('服务已启动'); setTimeout(updateStatus,2000); }
+    else{ showToast(d.error || '启动失败',true); }
+  });
+}
+
+function stopGateway(){
+  showToast('停止服务...');
+  fetch('/kiro-gateway/api/stop',{method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.ok){ showToast('服务已停止'); setTimeout(updateStatus,1000); }
+    else{ showToast(d.error || '停止失败',true); }
+  });
+}
+
+function restartGateway(){
+  showToast('重启服务...');
+  fetch('/kiro-gateway/api/stop',{method:'POST'}).then(()=>{
+    setTimeout(()=>{
+      fetch('/kiro-gateway/api/start',{method:'POST'}).then(r=>r.json()).then(d=>{
+        if(d.ok){ showToast('服务已重启'); setTimeout(updateStatus,2000); }
+        else{ showToast(d.error || '重启失败',true); }
+      });
+    },1500);
+  });
+}
+
+function testAPI(){
+  showToast('测试连接...');
+  fetch('/kiro-gateway/api/test',{method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.ok){ showToast('API 连接正常'); }
+    else{ showToast(d.error || '连接失败',true); }
+  });
+}
+
+function showTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.querySelectorAll('[id^="tab-"]').forEach(p=>p.style.display='none');
+  document.getElementById('tab-'+name).style.display='block';
+  if(name==='logs') refreshLogs();
+}
+
+function copyApiKey(){
+  var key = document.getElementById('api-key-input').value;
+  navigator.clipboard.writeText(key).then(()=>showToast('已复制 API Key'));
+}
+
+function selectModel(id){
+  currentModel = id;
+  document.querySelectorAll('.model-card').forEach(c=>c.classList.remove('selected'));
+  event.target.closest('.model-card').classList.add('selected');
+  updateCodeExample();
+}
+
+function updateCodeExample(){
+  var code = `from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://{{ host_ip }}:{{ status.port }}/v1",
+    api_key="{{ api_key }}"
+)
+
+response = client.chat.completions.create(
+    model="${currentModel}",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+
+print(response.choices[0].message.content)`;
+  document.getElementById('code-example').textContent = code;
+}
+
+function copyCode(){
+  var code = document.getElementById('code-example').textContent;
+  navigator.clipboard.writeText(code).then(()=>showToast('已复制代码'));
+}
+
+function refreshLogs(){
+  fetch('/kiro-gateway/api/logs').then(r=>r.text()).then(log=>{
+    document.getElementById('log-container').textContent = log || '暂无日志';
+  }).catch(e=>{
+    document.getElementById('log-container').textContent = '加载日志失败';
+  });
+}
+
+updateStatus();
+setInterval(updateStatus,15000);
+</script>
+{% endblock %}

@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiro Gateway 集成方案设计</title>
+    <style>
+        :root {
+            --bg-page: #0f1117;
+            --bg-card: #1a1d27;
+            --bg-elevated: #222530;
+            --bg-hover: #2a2d38;
+            --border: rgba(255,255,255,.06);
+            --accent: #4b8cf7;
+            --accent-glow: rgba(75,140,247,.15);
+            --accent-dim: rgba(75,140,247,.08);
+            --text: #e1e4e8;
+            --text-secondary: #8b8fa3;
+            --text-dim: #555a6a;
+            --danger: #f85149;
+            --success: #3fb950;
+            --warning: #d29922;
+            --purple: #a371f7;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: var(--bg-page);
+            color: var(--text);
+            font-size: 14px;
+            line-height: 1.6;
+            padding: 40px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { font-size: 32px; margin-bottom: 10px; background: linear-gradient(135deg, var(--accent), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        h2 { font-size: 24px; margin: 40px 0 20px; padding-bottom: 10px; border-bottom: 2px solid var(--accent-dim); }
+        h3 { font-size: 18px; margin: 24px 0 12px; color: var(--accent); }
+        .subtitle { color: var(--text-secondary); margin-bottom: 40px; }
+        
+        .section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+        .section-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+        .section-title .icon { width: 24px; height: 24px; border-radius: 6px; background: var(--accent-dim); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 12px; }
+        
+        .feature-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+        .feature-card { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; padding: 20px; transition: transform 0.2s, border-color 0.2s; }
+        .feature-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+        .feature-card h4 { font-size: 15px; margin-bottom: 8px; color: var(--text); }
+        .feature-card p { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+        
+        code { background: var(--bg-elevated); padding: 2px 6px; border-radius: 4px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; color: var(--purple); }
+        pre { background: var(--bg-elevated); padding: 16px; border-radius: 8px; overflow-x: auto; margin: 16px 0; border: 1px solid var(--border); }
+        pre code { background: none; padding: 0; }
+        
+        .highlight-box { background: var(--accent-dim); border-left: 3px solid var(--accent); padding: 16px 20px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+        
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-dim); font-weight: 500; font-size: 12px; text-transform: uppercase; }
+        td { color: var(--text-secondary); font-size: 13px; }
+        
+        .mockup { background: var(--bg-page); border: 2px solid var(--border); border-radius: 12px; padding: 24px; margin: 24px 0; }
+        .mockup-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+        .mockup-header .logo { width: 40px; height: 40px; border-radius: 8px; background: var(--accent-dim); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; }
+        .mockup-header h4 { font-size: 16px; }
+        .mockup-header .subtitle { font-size: 12px; color: var(--text-dim); margin: 0; }
+        
+        .status-bar { display: flex; gap: 16px; margin-bottom: 20px; }
+        .status-item { flex: 1; background: var(--bg-elevated); border-radius: 8px; padding: 16px; display: flex; align-items: center; gap: 12px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--success); }
+        .status-dot.off { background: var(--danger); }
+        .status-item .label { font-size: 11px; color: var(--text-dim); }
+        .status-item .value { font-size: 14px; font-weight: 600; color: var(--text); }
+        
+        .model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+        .model-card { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; padding: 16px; cursor: pointer; transition: all 0.2s; }
+        .model-card:hover { border-color: var(--accent); background: var(--accent-dim); }
+        .model-card.selected { border-color: var(--accent); background: var(--accent-dim); }
+        .model-card .name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+        .model-card .desc { font-size: 11px; color: var(--text-dim); }
+        
+        .api-key-box { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; align-items: center; gap: 12px; }
+        .api-key-box input { flex: 1; background: var(--bg-page); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; color: var(--text); font-family: monospace; font-size: 13px; }
+        .btn { padding: 10px 20px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; transition: all 0.2s; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: #5a9af7; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
+        .btn-outline:hover { background: var(--bg-hover); }
+        .btn-success { background: var(--success); color: #fff; }
+        
+        .url-display { background: var(--bg-page); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-top: 16px; }
+        .url-display .label { font-size: 11px; color: var(--text-dim); margin-bottom: 8px; }
+        .url-display .url { font-family: monospace; font-size: 14px; color: var(--accent); word-break: break-all; }
+        
+        .action-buttons { display: flex; gap: 8px; margin-top: 20px; }
+        
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+        .badge-success { background: rgba(63,185,80,.15); color: var(--success); }
+        .badge-warning { background: rgba(210,153,34,.15); color: var(--warning); }
+        .badge-danger { background: rgba(248,81,73,.15); color: var(--danger); }
+        
+        .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+        .tab { padding: 12px 20px; cursor: pointer; font-size: 13px; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+        .tab:hover { color: var(--text); }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        
+        .code-example { background: var(--bg-elevated); border-radius: 8px; overflow: hidden; margin: 16px 0; }
+        .code-example .header { background: var(--bg-page); padding: 10px 16px; font-size: 12px; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+        .code-example pre { margin: 0; border: none; border-radius: 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Kiro Gateway 集成方案</h1>
+        <p class="subtitle">将 Kiro Gateway 无缝集成到 AI 工具集中，提供统一的管理界面和 API 访问</p>
+        
+        <h2>一、方案概述</h2>
+        <div class="section">
+            <div class="section-title">
+                <div class="icon">◆</div>
+                设计目标
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>🔌 统一入口</h4>
+                    <p>将 Kiro Gateway 作为工具集的一个模块，用户无需记忆独立地址，通过工具集即可访问所有功能。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>🔑 API Key 管理</h4>
+                    <p>提供界面查看和复制 API Key，一键生成不同用途的密钥，方便在多个应用中使用。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>📊 服务监控</h4>
+                    <p>实时显示服务运行状态、端口占用、进程信息，支持一键启动/停止/重启。</p>
+                </div>
+                <div class="feature-card">
+                    <h4>📋 模型选择</h4>
+                    <p>列出所有可用模型及其特性，帮助用户选择适合的模型，提供调用示例代码。</p>
+                </div>
+            </div>
+        </div>
+        
+        <h2>二、功能设计</h2>
+        
+        <div class="section">
+            <h3>1. 服务管理</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>功能</th>
+                        <th>描述</th>
+                        <th>实现方式</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>启动服务</td>
+                        <td>一键启动 Kiro Gateway</td>
+                        <td>通过 subprocess 启动 venv/bin/python main.py</td>
+                    </tr>
+                    <tr>
+                        <td>停止服务</td>
+                        <td>安全停止运行中的服务</td>
+                        <td>pkill -f kiro-gateway</td>
+                    </tr>
+                    <tr>
+                        <td>状态检测</td>
+                        <td>实时检测服务运行状态</td>
+                        <td>pgrep 检查进程 + HTTP 健康检查</td>
+                    </tr>
+                    <tr>
+                        <td>日志查看</td>
+                        <td>查看服务运行日志</td>
+                        <td>读取 /tmp/kiro-gateway.log</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h3>2. API Key 管理</h3>
+            <p>Kiro Gateway 使用单一 API Key 保护网关，但我们可以为不同用途提供调用示例：</p>
+            
+            <div class="highlight-box">
+                <strong>设计理念：</strong>Kiro Gateway 本身不支持多 API Key，但用户可以在自己的应用中使用同一个 Key 调用不同模型，实现"一个 Key 访问所有模型"。
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>场景</th>
+                        <th>使用模型</th>
+                        <th>说明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>日常编码</td>
+                        <td>claude-sonnet-4-5</td>
+                        <td>平衡性能，适合大多数开发任务</td>
+                    </tr>
+                    <tr>
+                        <td>快速原型</td>
+                        <td>claude-haiku-4-5</td>
+                        <td>快速响应，节省时间</td>
+                    </tr>
+                    <tr>
+                        <td>复杂任务</td>
+                        <td>claude-opus-4-5</td>
+                        <td>最强性能，处理复杂推理</td>
+                    </tr>
+                    <tr>
+                        <td>自动选择</td>
+                        <td>auto</td>
+                        <td>让 Kiro 自动选择最佳模型</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h3>3. 连接信息展示</h3>
+            <p>自动检测并展示连接所需的所有信息：</p>
+            <pre><code># OpenAI 兼容接口
+Base URL: http://&lt;服务器IP&gt;:8000/v1
+API Key: kiro-gateway-2026-secret
+
+# Anthropic 兼容接口
+Base URL: http://&lt;服务器IP&gt;:8000
+API Key: kiro-gateway-2026-secret</code></pre>
+        </div>
+        
+        <h2>三、界面设计</h2>
+        
+        <div class="mockup">
+            <div class="mockup-header">
+                <div class="logo">KG</div>
+                <div>
+                    <h4>Kiro Gateway 管理</h4>
+                    <p class="subtitle">AI 模型代理网关 · OpenAI/Anthropic 兼容</p>
+                </div>
+            </div>
+            
+            <div class="status-bar">
+                <div class="status-item">
+                    <div>
+                        <div class="status-dot"></div>
+                    </div>
+                    <div>
+                        <div class="label">服务状态</div>
+                        <div class="value">运行中</div>
+                    </div>
+                </div>
+                <div class="status-item">
+                    <div>
+                        <div class="status-dot" style="background: var(--accent);"></div>
+                    </div>
+                    <div>
+                        <div class="label">监听端口</div>
+                        <div class="value">8000</div>
+                    </div>
+                </div>
+                <div class="status-item">
+                    <div>
+                        <div class="status-dot" style="background: var(--purple);"></div>
+                    </div>
+                    <div>
+                        <div class="label">进程 ID</div>
+                        <div class="value">12345</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="tabs">
+                <div class="tab active">概览</div>
+                <div class="tab">模型</div>
+                <div class="tab">连接</div>
+                <div class="tab">日志</div>
+            </div>
+            
+            <h4 style="margin-bottom: 12px;">API Key</h4>
+            <div class="api-key-box">
+                <input type="text" value="kiro-gateway-2026-secret" readonly>
+                <button class="btn btn-outline">📋 复制</button>
+                <button class="btn btn-outline">🔄 重新生成</button>
+            </div>
+            
+            <div class="url-display">
+                <div class="label">OpenAI 兼容接口 Base URL</div>
+                <div class="url">http://10.230.169.128:8000/v1</div>
+            </div>
+            
+            <div class="url-display">
+                <div class="label">Anthropic 兼容接口 Base URL</div>
+                <div class="url">http://10.230.169.128:8000</div>
+            </div>
+            
+            <div class="action-buttons">
+                <button class="btn btn-success">▶ 启动</button>
+                <button class="btn btn-outline">🔄 重启</button>
+                <button class="btn btn-outline" style="color: var(--danger);">⏹ 停止</button>
+            </div>
+        </div>
+        
+        <h3>模型选择界面</h3>
+        <div class="mockup">
+            <h4 style="margin-bottom: 16px;">可用模型</h4>
+            <div class="model-grid">
+                <div class="model-card selected">
+                    <div class="name">Claude Sonnet 4.5</div>
+                    <div class="desc">平衡性能，适合编码和通用任务</div>
+                    <span class="badge badge-success" style="margin-top: 8px;">推荐</span>
+                </div>
+                <div class="model-card">
+                    <div class="name">Claude Haiku 4.5</div>
+                    <div class="desc">极速响应，快速迭代</div>
+                </div>
+                <div class="model-card">
+                    <div class="name">Claude Opus 4.5</div>
+                    <div class="desc">最强性能，复杂任务</div>
+                    <span class="badge badge-warning" style="margin-top: 8px;">付费</span>
+                </div>
+                <div class="model-card">
+                    <div class="name">Auto</div>
+                    <div class="desc">自动选择最佳模型</div>
+                </div>
+            </div>
+            
+            <div class="code-example">
+                <div class="header">Python 调用示例</div>
+                <pre><code>from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://10.230.169.128:8000/v1",
+    api_key="kiro-gateway-2026-secret"
+)
+
+response = client.chat.completions.create(
+    model="claude-sonnet-4-5",
+    messages=[{"role": "user", "content": "Hello!"}]
+)</code></pre>
+            </div>
+            
+            <div class="action-buttons">
+                <button class="btn btn-primary">📋 复制代码</button>
+            </div>
+        </div>
+        
+        <h2>四、技术实现</h2>
+        
+        <div class="section">
+            <h3>后端 API 设计</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>端点</th>
+                        <th>方法</th>
+                        <th>功能</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>/kiro-gateway/</code></td>
+                        <td>GET</td>
+                        <td>管理界面主页</td>
+                    </tr>
+                    <tr>
+                        <td><code>/kiro-gateway/api/status</code></td>
+                        <td>GET</td>
+                        <td>获取服务状态</td>
+                    </tr>
+                    <tr>
+                        <td><code>/kiro-gateway/api/start</code></td>
+                        <td>POST</td>
+                        <td>启动服务</td>
+                    </tr>
+                    <tr>
+                        <td><code>/kiro-gateway/api/stop</code></td>
+                        <td>POST</td>
+                        <td>停止服务</td>
+                    </tr>
+                    <tr>
+                        <td><code>/kiro-gateway/api/test</code></td>
+                        <td>POST</td>
+                        <td>测试 API 连接</td>
+                    </tr>
+                    <tr>
+                        <td><code>/kiro-gateway/api/logs</code></td>
+                        <td>GET</td>
+                        <td>获取服务日志</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h3>文件结构</h3>
+            <pre><code>/home/egc/YH/AI-Tools/
+├── app/
+│   ├── kiro_gateway.py          # Blueprint 控制器
+│   └── templates/
+│       └── kiro_gateway.html    # 管理界面模板
+└── ...</code></pre>
+        </div>
+        
+        <div class="section">
+            <h3>认证集成</h3>
+            <p>Kiro Gateway 自动从 <code>kiro-cli</code> 数据库读取认证信息，无需用户手动登录。界面会显示认证状态：</p>
+            <ul style="margin-left: 20px; margin-top: 12px;">
+                <li><span class="badge badge-success">已认证</span> 凭证有效，可以正常使用</li>
+                <li><span class="badge badge-warning">即将过期</span> 凭证将在 7 天内过期，建议刷新</li>
+                <li><span class="badge badge-danger">已过期</span> 需要重新登录 kiro-cli</li>
+            </ul>
+            
+            <div class="highlight-box" style="margin-top: 16px;">
+                <strong>刷新凭证：</strong>运行 <code>kiro-cli</code> 命令即可自动刷新，无需额外操作。
+            </div>
+        </div>
+        
+        <h2>五、集成步骤</h2>
+        
+        <div class="section">
+            <ol style="margin-left: 24px;">
+                <li style="margin-bottom: 12px;">创建 Blueprint 文件 <code>app/kiro_gateway.py</code></li>
+                <li style="margin-bottom: 12px;">创建模板文件 <code>app/templates/kiro_gateway.html</code></li>
+                <li style="margin-bottom: 12px;">在 <code>app/__init__.py</code> 注册蓝图</li>
+                <li style="margin-bottom: 12px;">更新导航栏添加入口</li>
+                <li style="margin-bottom: 12px;">重启 AI 工具集服务</li>
+            </ol>
+        </div>
+        
+        <h2>六、优势总结</h2>
+        
+        <div class="feature-grid">
+            <div class="feature-card">
+                <h4>✅ 统一管理</h4>
+                <p>所有工具集中在一个平台，降低使用门槛。</p>
+            </div>
+            <div class="feature-card">
+                <h4>✅ 自动化</h4>
+                <p>自动检测服务状态，自动管理进程。</p>
+            </div>
+            <div class="feature-card">
+                <h4>✅ 用户友好</h4>
+                <p>清晰的信息展示，一键复制代码示例。</p>
+            </div>
+            <div class="feature-card">
+                <h4>✅ 可扩展</h4>
+                <p>预留接口，未来可添加更多功能。</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

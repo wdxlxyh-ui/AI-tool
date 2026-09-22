@@ -54,7 +54,18 @@ def get_system_stats(base_dir):
             stats['uptime'] = f'{d}天{h}小时'
     except: stats['uptime'] = '未知'
 
-    stats['tool_count'] = 7
+    stats['tool_count'] = 8  # 文件管理 + SFTP + OpenCode + Hermes + Kiro + 工作日报 + EMS部署 + 削峰填谷
+    
+    # Get host IP
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        stats['host_ip'] = s.getsockname()[0]
+        s.close()
+    except:
+        stats['host_ip'] = '127.0.0.1'
+    
     return stats
 
 @dashboard_bp.route('/dashboard')

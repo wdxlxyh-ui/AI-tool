@@ -18,19 +18,19 @@ def create_app():
     from .auth import auth_bp
     from .file_manager import fm_bp
     from .dashboard import dashboard_bp
-    from .simulator_manager import sm_bp
     from .sftp_manager import sftp_bp
     from .work_reports import wr_bp
     from .ems_deploy import ed_bp
     from .curtailment import ct_bp
+    from .kiro_gateway import kiro_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(fm_bp)
     app.register_blueprint(dashboard_bp)
-    app.register_blueprint(sm_bp)
     app.register_blueprint(sftp_bp)
     app.register_blueprint(wr_bp)
     app.register_blueprint(ed_bp)
     app.register_blueprint(ct_bp)
+    app.register_blueprint(kiro_bp)
 
     # Root redirect
     @app.route('/')

@@ -46,7 +46,7 @@
   <div class="stat-card">
     <div class="label">工具数量</div>
     <div class="value">{{ stats.tool_count }}</div>
-    <div class="sub">文件 + 模拟器 + OpenCode + SFTP + Hermes</div>
+    <div class="sub">文件 + SFTP + OpenCode + Hermes + Kiro + EMS + 削峰填谷</div>
   </div>
   <div class="stat-card">
     <div class="label">磁盘空间</div>
@@ -64,11 +64,11 @@
     <p>全文件系统浏览、上传、下载、删除。支持任意路径与拖拽上传。</p>
     <div class="footer"><span class="dot on"></span> 运行中</div>
   </a>
-  <a class="tool-card" href="{{ url_for('simulator.index') }}">
-    <div class="icon sim">◈</div>
-    <h3>模拟器管理</h3>
-    <p>IEC104 部署、升级、启停、远程管理。本机与远程服务器统一控制。</p>
-    <div class="footer"><span class="dot on"></span> 运行中</div>
+  <a class="tool-card" href="{{ url_for('sftp.index') }}">
+    <div class="icon ow">⇄</div>
+    <h3>SFTP 传输</h3>
+    <p>远程文件管理，上传下载。支持保存服务器连接记录，双栏对照操作。</p>
+    <div class="footer"><span class="dot on"></span> SSH 连接</div>
   </a>
   <a class="tool-card" href="{{ url_for('ems_deploy.index') }}">
     <div class="icon" style="background:rgba(83,155,245,.1);color:#539bf5;">⬡</div>
@@ -76,11 +76,11 @@
     <p>Edge-EMS 组件自动化部署。Azure Blob 下载、服务器上传、多分支多组件配置。</p>
     <div class="footer"><span class="dot on"></span> 已集成</div>
   </a>
-  <a class="tool-card" href="{{ url_for('sftp.index') }}">
-    <div class="icon ow">⇄</div>
-    <h3>SFTP 传输</h3>
-    <p>远程文件管理，上传下载。支持保存服务器连接记录，双栏对照操作。</p>
-    <div class="footer"><span class="dot on"></span> SSH 连接</div>
+  <a class="tool-card" href="{{ url_for('curtailment.index') }}">
+    <div class="icon" style="background:rgba(210,153,34,.1);color:var(--warning);">⚡</div>
+    <h3>限电计划</h3>
+    <p>削峰填谷限电计划管理，支持计划配置和执行监控。</p>
+    <div class="footer"><span class="dot on"></span> 运行中</div>
   </a>
   <div class="tool-card" style="cursor:default;">
     <div class="icon ow">◇</div>
@@ -88,28 +88,34 @@
     <p>AI 编程助手 Web 界面，端口 3000。由 systemd 守护管理。</p>
     <div class="footer"><span class="dot" id="ow-dot"></span> <span id="ow-status">检测中...</span></div>
     <div class="controls">
-      <a class="btn btn-primary" href="http://10.230.169.162:3000/" target="_blank">打开</a>
+      <a class="btn btn-primary" id="ow-link" href="#" target="_blank">打开</a>
       <button class="btn btn-outline" onclick="owControl('start')">启动</button>
       <button class="btn btn-outline" onclick="owControl('restart')">重启</button>
       <button class="btn btn-danger" onclick="owControl('stop')">停止</button>
     </div>
   </div>
-  <a class="tool-card" href="{{ url_for('work_reports.index') }}">
-    <div class="icon" style="background:rgba(63,185,80,.1);color:var(--success);">📋</div>
-    <h3>工作日报</h3>
-    <p>碎片记录 · 自动整理 · 日报/周报生成 · 任务看板</p>
-    <div class="footer"><span class="dot on"></span> 已集成</div>
-  </a>
   <div class="tool-card" style="cursor:default;">
     <div class="icon" style="background:rgba(163,113,247,.1);color:#a371f7;">☰</div>
     <h3>Hermes Web UI</h3>
     <p>Hermes AI Agent Web 管理界面，端口 8648。由 systemd 守护管理。</p>
     <div class="footer"><span class="dot" id="hm-dot"></span> <span id="hm-status">检测中...</span></div>
     <div class="controls">
-      <a class="btn btn-primary" href="http://10.230.169.162:8648/" target="_blank">打开</a>
+      <a class="btn btn-primary" id="hm-link" href="#" target="_blank">打开</a>
       <button class="btn btn-outline" onclick="hmControl('start')">启动</button>
       <button class="btn btn-outline" onclick="hmControl('restart')">重启</button>
       <button class="btn btn-danger" onclick="hmControl('stop')">停止</button>
+    </div>
+  </div>
+  <div class="tool-card" style="cursor:default;">
+    <div class="icon" style="background:rgba(63,185,80,.1);color:var(--success);">◇</div>
+    <h3>Kiro Gateway</h3>
+    <p>AI 模型代理网关，OpenAI/Anthropic 兼容接口，支持 Claude、GLM、MiniMax、Qwen 等 13+ 模型。</p>
+    <div class="footer"><span class="dot" id="kg-dot"></span> <span id="kg-status">检测中...</span></div>
+    <div class="controls">
+      <a class="btn btn-primary" href="{{ url_for('kiro_gateway.index') }}">管理</a>
+      <button class="btn btn-outline" onclick="kgControl('start')">启动</button>
+      <button class="btn btn-outline" onclick="kgControl('restart')">重启</button>
+      <button class="btn btn-danger" onclick="kgControl('stop')">停止</button>
     </div>
   </div>
 </div>
@@ -121,7 +127,7 @@
   <div class="i"><label>运行时间</label><span>{{ stats.uptime }}</span></div>
   <div class="i"><label>Python</label><span>3.8.10 · Flask 3.0.3</span></div>
   <div class="i"><label>数据库</label><span>SQLite</span></div>
-  <div class="i"><label>模拟器</label><span style="color:var(--accent);">v2.5.3 · 端口 8989</span></div>
+  <div class="i"><label>主机 IP</label><span style="color:var(--accent);">{{ stats.host_ip }}</span></div>
 </div>
 {% endblock %}
 
@@ -159,6 +165,14 @@
     requestAnimationFrame(tick);
   });
 })();
+
+// 动态设置链接
+(function(){
+  var hostIP = '{{ stats.host_ip }}';
+  document.getElementById('ow-link').href = 'http://' + hostIP + ':3000/';
+  document.getElementById('hm-link').href = 'http://' + hostIP + ':8648/';
+})();
+
 async function checkOW(){
   try{var r=await fetch('http://localhost:3000/',{mode:'no-cors'});document.getElementById('ow-dot').className='dot on';document.getElementById('ow-status').textContent='运行中 · 端口 3000'}catch(e){
     document.getElementById('ow-dot').className='dot off';document.getElementById('ow-status').textContent='已停止'}
@@ -182,5 +196,32 @@ async function hmControl(action){
   if(d.ok){showToast('操作成功');setTimeout(checkHM,3000)}else{showToast('失败')}}catch(e){showToast('操作失败')}
 }
 checkHM();setInterval(checkHM,15000);
+
+async function checkKG(){
+  try{var r=await fetch('/kiro-gateway/api/status'),d=await r.json();
+    if(d.running){
+      document.getElementById('kg-dot').className='dot on';
+      document.getElementById('kg-status').textContent='运行中 · 端口 ' + d.port;
+    }else{
+      document.getElementById('kg-dot').className='dot off';
+      document.getElementById('kg-status').textContent='已停止';
+    }
+  }catch(e){
+    document.getElementById('kg-dot').className='dot off';
+    document.getElementById('kg-status').textContent='检测失败';
+  }
+}
+async function kgControl(action){
+  var labels={start:'启动',stop:'停止',restart:'重启'};
+  showToast(labels[action]+' Kiro Gateway...');
+  if(action==='start'){
+    try{var r=await fetch('/kiro-gateway/api/start',{method:'POST'}),d=await r.json();showToast(d.message||'完成');setTimeout(checkKG,2000)}catch(e){showToast('操作失败')}
+  }else if(action==='stop'){
+    try{var r=await fetch('/kiro-gateway/api/stop',{method:'POST'}),d=await r.json();showToast(d.message||'完成');setTimeout(checkKG,1000)}catch(e){showToast('操作失败')}
+  }else if(action==='restart'){
+    try{await fetch('/kiro-gateway/api/stop',{method:'POST'});await new Promise(r=>setTimeout(r,1500));await fetch('/kiro-gateway/api/start',{method:'POST'});showToast('重启完成');setTimeout(checkKG,2000)}catch(e){showToast('操作失败')}
+  }
+}
+checkKG();setInterval(checkKG,15000);
 </script>
 {% endblock %}
